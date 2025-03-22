@@ -24,7 +24,7 @@ istari = "0.1.0"
 ### Basic Example
 
 ```rust
-use istari::{ActionFn, Istari, Menu};
+use istari::{Istari, Menu};
 use std::io;
 
 // Your application state
@@ -40,22 +40,22 @@ fn main() -> io::Result<()> {
     let mut root_menu = Menu::new("Main Menu");
     
     // Add a simple action that returns output
-    root_menu.add_action('1', "Increment Counter", Box::new(|state: &mut AppState, params: Option<&str>| {
+    root_menu.add_action('1', "Increment Counter", |state: &mut AppState, params: Option<&str>| {
         // Parse optional parameter as amount or default to 1
         let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
         state.counter += amount;
         // Return Some with a message to show in output view
         Some(format!("Counter incremented by {} to {}", amount, state.counter))
-    }));
+    });
     
     // Create a submenu
     let mut submenu = Menu::new("Settings");
-    submenu.add_action('r', "Reset Counter", Box::new(|state: &mut AppState, params: Option<&str>| {
+    submenu.add_action('r', "Reset Counter", |state: &mut AppState, params: Option<&str>| {
         // Parse optional parameter as value or default to 0
         let value = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(0);
         state.counter = value;
         Some(format!("Counter reset to {}", value))
-    }));
+    });
     
     // Add submenu to root
     root_menu.add_submenu('s', "Settings", submenu);
@@ -85,12 +85,12 @@ Parameters are passed to action functions as an `Option<&str>`:
 For example:
 ```rust
 // Action that uses an optional parameter
-let action = Box::new(|state: &mut AppState, params: Option<&str>| {
+let action = |state: &mut AppState, params: Option<&str>| {
     // Parse parameter or use default value
     let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
     state.counter += amount;
     Some(format!("Counter incremented by {}", amount))
-});
+};
 ```
 
 ### Action Output

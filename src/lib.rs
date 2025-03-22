@@ -17,6 +17,36 @@ pub enum Mode {
 pub type ActionFn<T> = Box<dyn Fn(&mut T, Option<&str>) -> Option<String> + Send + Sync>;
 pub type TickFn<T> = Box<dyn Fn(&mut T, &mut Vec<String>, f32) + Send + Sync>;
 
+/// A trait for converting closures to ActionFn
+pub trait IntoActionFn<T>: Send + Sync + 'static {
+    fn into_action_fn(self) -> ActionFn<T>;
+}
+
+/// Implementation for closures that can be converted to ActionFn
+impl<T, F> IntoActionFn<T> for F
+where
+    F: Fn(&mut T, Option<&str>) -> Option<String> + Send + Sync + 'static,
+{
+    fn into_action_fn(self) -> ActionFn<T> {
+        Box::new(self)
+    }
+}
+
+/// A trait for converting closures to TickFn
+pub trait IntoTickFn<T>: Send + Sync + 'static {
+    fn into_tick_fn(self) -> TickFn<T>;
+}
+
+/// Implementation for closures that can be converted to TickFn
+impl<T, F> IntoTickFn<T> for F
+where
+    F: Fn(&mut T, &mut Vec<String>, f32) + Send + Sync + 'static,
+{
+    fn into_tick_fn(self) -> TickFn<T> {
+        Box::new(self)
+    }
+}
+
 /// A menu item that can be selected
 pub struct MenuItem<T> {
     /// The key that activates this item
@@ -53,11 +83,14 @@ impl<T: std::fmt::Debug> fmt::Debug for MenuItem<T> {
 
 impl<T> MenuItem<T> {
     /// Create a new menu item with an action
-    pub fn new_action(key: char, description: String, action: ActionFn<T>) -> Self {
+    pub fn new_action<F>(key: char, description: String, action: F) -> Self 
+    where
+        F: IntoActionFn<T>,
+    {
         MenuItem {
             key,
             description,
-            action: Some(action),
+            action: Some(action.into_action_fn()),
             submenu: None,
         }
     }
@@ -111,7 +144,10 @@ impl<T> Menu<T> {
     }
 
     /// Add an action item to this menu
-    pub fn add_action(&mut self, key: char, description: impl Into<String>, action: ActionFn<T>) -> &mut Self {
+    pub fn add_action<F>(&mut self, key: char, description: impl Into<String>, action: F) -> &mut Self 
+    where
+        F: IntoActionFn<T>,
+    {
         self.add_item(MenuItem::new_action(key, description.into(), action))
     }
 
@@ -168,8 +204,11 @@ impl<T: std::fmt::Debug> Istari<T> {
     }
 
     /// Set a custom tick handler
-    pub fn with_tick_handler(mut self, handler: TickFn<T>) -> Self {
-        self.tick_handler = Some(handler);
+    pub fn with_tick_handler<F>(mut self, handler: F) -> Self 
+    where
+        F: IntoTickFn<T>,
+    {
+        self.tick_handler = Some(handler.into_tick_fn());
         self
     }
 

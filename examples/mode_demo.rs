@@ -55,22 +55,22 @@ fn main() -> io::Result<()> {
     let mut root_menu = Menu::new("Mode System Demo");
 
     // Add simple counter actions
-    root_menu.add_action('1', "Increment Counter (optional amount)", Box::new(|state: &mut ModeTestState, params: Option<&str>| {
+    root_menu.add_action('1', "Increment Counter (optional amount)", |state: &mut ModeTestState, params: Option<&str>| {
         let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
         state.counter += amount;
         state.add_log(&format!("Incremented counter by {} to {}", amount, state.counter));
         Some(format!("Counter incremented by {} to {}", amount, state.counter))
-    }));
+    });
 
-    root_menu.add_action('2', "Decrement Counter (optional amount)", Box::new(|state: &mut ModeTestState, params: Option<&str>| {
+    root_menu.add_action('2', "Decrement Counter (optional amount)", |state: &mut ModeTestState, params: Option<&str>| {
         let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
         state.counter -= amount;
         state.add_log(&format!("Decremented counter by {} to {}", amount, state.counter));
         Some(format!("Counter decremented by {} to {}", amount, state.counter))
-    }));
+    });
 
     // Add an action that demonstrates the need for scrolling
-    root_menu.add_action('3', "Generate Many Log Lines (optional count)", Box::new(|state: &mut ModeTestState, params: Option<&str>| {
+    root_menu.add_action('3', "Generate Many Log Lines (optional count)", |state: &mut ModeTestState, params: Option<&str>| {
         let count = params.and_then(|p| p.parse::<usize>().ok()).unwrap_or(50);
         let mut output = String::new();
         output.push_str(&format!("Generated {} log lines:\n", count));
@@ -82,22 +82,22 @@ fn main() -> io::Result<()> {
         }
         
         Some(output)
-    }));
+    });
 
     // Add an action to show all logs (demonstrating the need for scrolling)
-    root_menu.add_action('l', "Show All Logs", Box::new(|state: &mut ModeTestState, _params: Option<&str>| {
+    root_menu.add_action('l', "Show All Logs", |state: &mut ModeTestState, _params: Option<&str>| {
         if state.log_entries.is_empty() {
             return Some("No logs available.".to_string());
         }
         
         let logs = state.log_entries.join("\n");
         Some(format!("Complete Log History:\n\n{}", logs))
-    }));
+    });
 
     // Create a mode info submenu to explain the mode system
     let mut mode_info = Menu::new("Mode Information");
     
-    mode_info.add_action('c', "About Command Mode", Box::new(|_: &mut ModeTestState, _params: Option<&str>| {
+    mode_info.add_action('c', "About Command Mode", |_: &mut ModeTestState, _params: Option<&str>| {
         Some("COMMAND MODE\n\n\
               This is the default mode where you can use the menu keys to trigger actions.\n\
               - Menu keybindings work in this mode\n\
@@ -105,9 +105,9 @@ fn main() -> io::Result<()> {
               - Press 'q' to quit from the root menu\n\
               - Press 'b' to go back from submenus\n\
               - Ctrl+Q works to quit from anywhere".to_string())
-    }));
+    });
     
-    mode_info.add_action('s', "About Scroll Mode", Box::new(|_: &mut ModeTestState, _params: Option<&str>| {
+    mode_info.add_action('s', "About Scroll Mode", |_: &mut ModeTestState, _params: Option<&str>| {
         Some("SCROLL MODE\n\n\
               This mode allows you to navigate output content with vim-style keybindings.\n\
               - Press Esc to return to Command Mode\n\
@@ -117,9 +117,9 @@ fn main() -> io::Result<()> {
               - G: Jump to bottom\n\
               - Ctrl+A: Toggle auto-scroll\n\
               - Menu keys don't work in this mode".to_string())
-    }));
+    });
     
-    mode_info.add_action('t', "Try Scrolling (Generate Text)", Box::new(|_: &mut ModeTestState, params: Option<&str>| {
+    mode_info.add_action('t', "Try Scrolling (Generate Text)", |_: &mut ModeTestState, params: Option<&str>| {
         let line_count = params.and_then(|p| p.parse::<usize>().ok()).unwrap_or(50);
         let mut output = String::new();
         
@@ -136,7 +136,7 @@ fn main() -> io::Result<()> {
         output.push_str("Press 'g' twice to jump to the top, or 'G' to jump to the bottom.\n");
         
         Some(output)
-    }));
+    });
 
     // Add the info submenu to the root menu
     root_menu.add_submenu('i', "Mode Information", mode_info);

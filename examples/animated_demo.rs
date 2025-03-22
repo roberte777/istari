@@ -73,27 +73,27 @@ fn main() -> io::Result<()> {
     let mut root_menu = Menu::new("Animated Demo");
 
     // Add actions
-    root_menu.add_action('1', "Increment Counter (optional amount)", Box::new(|state: &mut AnimatedState, params: Option<&str>| {
+    root_menu.add_action('1', "Increment Counter (optional amount)", |state: &mut AnimatedState, params: Option<&str>| {
         let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
         state.counter += amount;
         Some(format!("Counter incremented by {} to {}", amount, state.counter))
-    }));
+    });
     
-    root_menu.add_action('2', "Decrement Counter (optional amount)", Box::new(|state: &mut AnimatedState, params: Option<&str>| {
+    root_menu.add_action('2', "Decrement Counter (optional amount)", |state: &mut AnimatedState, params: Option<&str>| {
         let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
         state.counter -= amount;
         Some(format!("Counter decremented by {} to {}", amount, state.counter))
-    }));
+    });
 
-    root_menu.add_action('t', "Start Timer (seconds)", Box::new(|state: &mut AnimatedState, params: Option<&str>| {
+    root_menu.add_action('t', "Start Timer (seconds)", |state: &mut AnimatedState, params: Option<&str>| {
         let seconds = params.and_then(|p| p.parse::<u64>().ok()).unwrap_or(10);
         state.timer_active = true;
         state.timer_start = Some(Instant::now());
         state.timer_duration = Duration::from_secs(seconds);
         Some(format!("Timer started! ({} seconds)", seconds))
-    }));
+    });
     
-    root_menu.add_action('a', "Toggle Animation", Box::new(|state: &mut AnimatedState, _params: Option<&str>| {
+    root_menu.add_action('a', "Toggle Animation", |state: &mut AnimatedState, _params: Option<&str>| {
         state.timer_active = !state.timer_active;
         if state.timer_active {
             state.timer_start = None; // Don't count down, just animate
@@ -101,7 +101,7 @@ fn main() -> io::Result<()> {
         } else {
             Some("Animation stopped!".to_string())
         }
-    }));
+    });
 
     // Define the animation tick handler
     let tick_handler = |state: &mut AnimatedState, messages: &mut Vec<String>, _delta: f32| {
@@ -118,7 +118,7 @@ fn main() -> io::Result<()> {
 
     // Create the Istari app with our custom tick handler
     let mut app = Istari::new(root_menu, state)
-        .with_tick_handler(Box::new(tick_handler));
+        .with_tick_handler(tick_handler);
     
     app.run()?;
 
