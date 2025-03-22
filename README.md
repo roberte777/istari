@@ -12,6 +12,7 @@ enabling you to quickly build interactive terminal applications with beautiful m
 - **Split-View UI** - Menu on the left, action output on the right
 - **State Management** - Associate actions with your application state
 - **Parameter Support** - Pass parameters to menu actions
+- **Dual Rendering** - Choose between rich TUI or plain text output
 
 ## 🚀 Quick Start
 
@@ -69,6 +70,21 @@ menu.add_action("fetch", "Fetch Data", |state, params| {
 // In the terminal:
 inc 5      // Pass "5" to the "inc" action
 ```
+
+### Rendering Modes
+
+Istari supports two rendering modes to fit different use cases:
+
+```rust
+// Rich TUI mode (default) - interactive menus with split-view UI
+let app = Istari::new(menu, state);
+
+// Plain text mode - simpler output for scripts or CI environments
+let app = Istari::new(menu, state).with_render_mode(RenderMode::Text);
+```
+
+- **TUI Mode**: Full-featured interactive UI with colors, borders, and styled text
+- **Text Mode**: Plain text output ideal for scripts, CI/CD pipelines, or testing
 
 ## 📚 Examples
 
