@@ -5,6 +5,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio;
 
+/// Defines the rendering method used by the application
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RenderMode {
+    /// Full terminal UI with ratatui
+    TUI,
+    /// Simple text-based interface
+    Text,
+}
+
 /// Main application that handles rendering and events
 pub struct Istari<T> {
     /// The current menu being displayed
@@ -27,6 +36,8 @@ pub struct Istari<T> {
     show_input: bool,
     /// Tokio runtime for executing async actions
     runtime: tokio::runtime::Runtime,
+    /// Rendering mode (TUI or Text)
+    render_mode: RenderMode,
 }
 
 impl<T: std::fmt::Debug> Istari<T> {
@@ -46,6 +57,7 @@ impl<T: std::fmt::Debug> Istari<T> {
             input_buffer: String::new(),
             show_input: false,
             runtime: tokio::runtime::Runtime::new().unwrap(),
+            render_mode: RenderMode::TUI, // Default to TUI mode
         })
     }
 
@@ -56,6 +68,17 @@ impl<T: std::fmt::Debug> Istari<T> {
     {
         self.tick_handler = Some(handler.into_tick_fn());
         self
+    }
+
+    /// Set the rendering mode
+    pub fn with_render_mode(mut self, mode: RenderMode) -> Self {
+        self.render_mode = mode;
+        self
+    }
+
+    /// Get the current rendering mode
+    pub fn render_mode(&self) -> RenderMode {
+        self.render_mode
     }
 
     /// Get a reference to the current menu

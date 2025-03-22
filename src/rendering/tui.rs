@@ -246,8 +246,8 @@ impl Renderer {
     }
 }
 
-/// Run the application
-pub fn run<T: std::fmt::Debug>(app: &mut Istari<T>) -> io::Result<()> {
+/// Run the application in TUI mode
+pub fn run<T: std::fmt::Debug>(app: &mut crate::Istari<T>) -> io::Result<()> {
     let mut renderer = Renderer::new()?;
     renderer.init()?;
 
@@ -259,7 +259,10 @@ pub fn run<T: std::fmt::Debug>(app: &mut Istari<T>) -> io::Result<()> {
 }
 
 /// Main event loop
-fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) -> io::Result<()> {
+fn event_loop<T: std::fmt::Debug>(
+    app: &mut crate::Istari<T>,
+    renderer: &mut Renderer,
+) -> io::Result<()> {
     // Define the tick rate (how often to redraw)
     let tick_rate = Duration::from_millis(100);
     let mut last_tick = Instant::now();
@@ -268,198 +271,162 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
         // Render the current state
         renderer.render(app)?;
 
-        // Calculate how long to wait before the next tick
+        // Check if we should perform a tick update
         let timeout = tick_rate
             .checked_sub(last_tick.elapsed())
             .unwrap_or_else(|| Duration::from_secs(0));
 
-        // Poll for events with the calculated timeout
+        // Poll for events with a timeout
         if crossterm::event::poll(timeout)? {
-            if let crossterm::event::Event::Key(key) = crossterm::event::read()? {
-                match key.code {
-                    // Handle Escape key to just clear input in command mode
-                    crossterm::event::KeyCode::Esc => {
-                        if app.mode() == Mode::Command {
-                            // Clear input when in command mode
-                            app.clear_input_buffer();
-                        }
-                    }
-                    // Handle Tab key to switch between modes
-                    crossterm::event::KeyCode::Tab => {
-                        app.toggle_mode();
-                    }
-                    // Handle Ctrl+Q to quit from anywhere
-                    crossterm::event::KeyCode::Char('q')
-                        if key
-                            .modifiers
-                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                    {
-                        break;
-                    }
-                    // Handle Enter key to process command input
-                    crossterm::event::KeyCode::Enter => {
-                        if app.mode() == Mode::Command {
-                            if !app.process_input_buffer() {
-                                break;
-                            }
-                        }
-                    }
-                    // Handle backspace to delete from input buffer
-                    crossterm::event::KeyCode::Backspace => {
-                        if app.mode() == Mode::Command {
-                            app.backspace_input_buffer();
-                        }
-                    }
-                    crossterm::event::KeyCode::Char(c) => {
-                        match app.mode() {
-                            Mode::Command => {
-                                // Add character to input buffer
-                                app.add_to_input_buffer(c);
-                            }
-                            Mode::Scroll => {
-                                // Handle vim-style navigation in scroll mode
-                                match c {
-                                    // vim-style scrolling: j = down, k = up
-                                    'j' => {
-                                        renderer.output_scroll += 1;
-                                        // Re-enable auto-scroll if we scroll to the bottom manually
-                                        let output_messages = app.output_messages();
-                                        let output_area_height =
-                                            renderer.terminal.size()?.height as usize - 2;
-                                        let content_height = output_messages.len();
-                                        let max_scroll =
-                                            content_height.saturating_sub(output_area_height);
-                                        if renderer.output_scroll >= max_scroll.saturating_sub(1) {
-                                            renderer.auto_scroll = true;
-                                        }
-                                    }
-                                    'k' => {
-                                        if renderer.output_scroll > 0 {
-                                            renderer.output_scroll -= 1;
-                                            // Disable auto-scroll when manually scrolling up
-                                            renderer.auto_scroll = false;
-                                        }
-                                    }
-                                    // vim-style page scrolling: u = half page up, d = half page down
-                                    'u' => {
-                                        // Half-page up
-                                        let page_size =
-                                            (renderer.terminal.size()?.height as usize - 2) / 2;
-                                        renderer.output_scroll =
-                                            renderer.output_scroll.saturating_sub(page_size);
-                                        // Disable auto-scroll when manually scrolling up
-                                        renderer.auto_scroll = false;
-                                    }
-                                    'd' => {
-                                        // Half-page down
-                                        let page_size =
-                                            (renderer.terminal.size()?.height as usize - 2) / 2;
-                                        renderer.output_scroll += page_size;
-                                        // Check if we're at the bottom and re-enable auto-scroll
-                                        let output_messages = app.output_messages();
-                                        let output_area_height =
-                                            renderer.terminal.size()?.height as usize - 2;
-                                        let content_height = output_messages.len();
-                                        let max_scroll =
-                                            content_height.saturating_sub(output_area_height);
-                                        if renderer.output_scroll >= max_scroll.saturating_sub(1) {
-                                            renderer.auto_scroll = true;
-                                        }
-                                    }
-                                    // vim-style to bottom: G
-                                    'G' => {
-                                        // Same as End key
-                                        renderer.output_scroll = usize::MAX; // Will be clamped in render
-                                        // Enable auto-scroll when going to bottom
-                                        renderer.auto_scroll = true;
-                                    }
-                                    // vim-style to top: gg (need to track state)
-                                    'g' => {
-                                        // We got "g" - go to top
-                                        renderer.output_scroll = 0;
-                                        // Disable auto-scroll when going to top
-                                        renderer.auto_scroll = false;
-                                    }
-                                    'a' if key
+            match crossterm::event::read()? {
+                crossterm::event::Event::Key(key) => {
+                    // Process key events based on current mode
+                    match app.mode() {
+                        crate::Mode::Command => {
+                            // Handle different key events in command mode
+                            match key.code {
+                                // Exit the application
+                                crossterm::event::KeyCode::Char('q')
+                                    if key
                                         .modifiers
                                         .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                                    {
-                                        // Toggle auto-scroll with Ctrl+A
-                                        renderer.auto_scroll = !renderer.auto_scroll;
-                                        // If enabling auto-scroll, jump to bottom immediately
-                                        if renderer.auto_scroll {
-                                            renderer.output_scroll = usize::MAX; // Will be clamped in render
+                                {
+                                    return Ok(());
+                                }
+
+                                // Toggle mode
+                                crossterm::event::KeyCode::Tab => {
+                                    app.toggle_mode();
+                                }
+
+                                // Toggle input display
+                                crossterm::event::KeyCode::Char('i')
+                                    if key
+                                        .modifiers
+                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                {
+                                    app.toggle_show_input();
+                                }
+
+                                // Process input when Enter is pressed
+                                crossterm::event::KeyCode::Enter => {
+                                    if !app.input_buffer().is_empty() {
+                                        if !app.process_input_buffer() {
+                                            return Ok(());
                                         }
                                     }
-                                    _ => {}
+                                }
+
+                                // Backspace to delete last character
+                                crossterm::event::KeyCode::Backspace => {
+                                    app.backspace_input_buffer();
+                                }
+
+                                // Add character to input buffer
+                                crossterm::event::KeyCode::Char(c) => {
+                                    app.add_to_input_buffer(c);
+                                }
+
+                                // Handle single-key commands directly
+                                _ => {
+                                    // Convert keycode to string representation
+                                    if let crossterm::event::KeyCode::Char(c) = key.code {
+                                        if app.input_buffer().is_empty() {
+                                            if !app.handle_key(c.to_string()) {
+                                                return Ok(());
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                    // Keep the arrow key navigation for output scrolling in any mode
-                    crossterm::event::KeyCode::Up => {
-                        if renderer.output_scroll > 0 {
-                            renderer.output_scroll -= 1;
-                            // Disable auto-scroll when manually scrolling up
-                            renderer.auto_scroll = false;
+
+                        crate::Mode::Scroll => {
+                            // Handle different key events in scroll mode
+                            match key.code {
+                                // Exit the application
+                                crossterm::event::KeyCode::Char('q')
+                                    if key
+                                        .modifiers
+                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                {
+                                    return Ok(());
+                                }
+
+                                // Toggle mode
+                                crossterm::event::KeyCode::Tab => {
+                                    app.toggle_mode();
+                                }
+
+                                // Toggle auto-scroll
+                                crossterm::event::KeyCode::Char('a')
+                                    if key
+                                        .modifiers
+                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                {
+                                    renderer.auto_scroll = !renderer.auto_scroll;
+                                }
+
+                                // Scroll down
+                                crossterm::event::KeyCode::Char('j')
+                                | crossterm::event::KeyCode::Down => {
+                                    renderer.output_scroll =
+                                        renderer.output_scroll.saturating_add(1);
+                                }
+
+                                // Scroll up
+                                crossterm::event::KeyCode::Char('k')
+                                | crossterm::event::KeyCode::Up => {
+                                    renderer.output_scroll =
+                                        renderer.output_scroll.saturating_sub(1);
+                                }
+
+                                // Page down
+                                crossterm::event::KeyCode::Char('d')
+                                | crossterm::event::KeyCode::PageDown => {
+                                    renderer.output_scroll =
+                                        renderer.output_scroll.saturating_add(10);
+                                }
+
+                                // Page up
+                                crossterm::event::KeyCode::Char('u')
+                                | crossterm::event::KeyCode::PageUp => {
+                                    renderer.output_scroll =
+                                        renderer.output_scroll.saturating_sub(10);
+                                }
+
+                                // Go to top
+                                crossterm::event::KeyCode::Char('g')
+                                | crossterm::event::KeyCode::Home => {
+                                    renderer.output_scroll = 0;
+                                }
+
+                                // Go to bottom
+                                crossterm::event::KeyCode::Char('G')
+                                | crossterm::event::KeyCode::End => {
+                                    // Will be clamped to max in the render method
+                                    renderer.output_scroll = usize::MAX;
+                                }
+
+                                _ => {}
+                            }
                         }
                     }
-                    crossterm::event::KeyCode::Down => {
-                        // We'll check the max scroll in render()
-                        renderer.output_scroll += 1;
-                        // Re-enable auto-scroll if we scroll to the bottom manually
-                        let output_messages = app.output_messages();
-                        let output_area_height = renderer.terminal.size()?.height as usize - 2; // Adjusting for borders
-                        let content_height = output_messages.len();
-                        let max_scroll = content_height.saturating_sub(output_area_height);
-                        if renderer.output_scroll >= max_scroll.saturating_sub(1) {
-                            renderer.auto_scroll = true;
-                        }
-                    }
-                    // Page Up/Down for faster scrolling
-                    crossterm::event::KeyCode::PageUp => {
-                        renderer.output_scroll = renderer.output_scroll.saturating_sub(10);
-                        // Disable auto-scroll when manually scrolling up
-                        renderer.auto_scroll = false;
-                    }
-                    crossterm::event::KeyCode::PageDown => {
-                        renderer.output_scroll += 10;
-                        // Upper bound will be enforced during rendering
-                        // Check if we're at the bottom and re-enable auto-scroll
-                        let output_messages = app.output_messages();
-                        let output_area_height = renderer.terminal.size()?.height as usize - 2; // Adjusting for borders
-                        let content_height = output_messages.len();
-                        let max_scroll = content_height.saturating_sub(output_area_height);
-                        if renderer.output_scroll >= max_scroll.saturating_sub(1) {
-                            renderer.auto_scroll = true;
-                        }
-                    }
-                    // Home/End keys for jumping to top/bottom
-                    crossterm::event::KeyCode::Home => {
-                        renderer.output_scroll = 0;
-                        // Disable auto-scroll when going to top
-                        renderer.auto_scroll = false;
-                    }
-                    crossterm::event::KeyCode::End => {
-                        // Set to a large value, will be clamped in render
-                        renderer.output_scroll = usize::MAX;
-                        // Enable auto-scroll when going to bottom
-                        renderer.auto_scroll = true;
-                    }
-                    _ => {}
                 }
+                crossterm::event::Event::Mouse(_) => {
+                    // Mouse events could be handled here if needed
+                }
+                crossterm::event::Event::Resize(_, _) => {
+                    // Resize events are automatically handled by the Terminal
+                }
+                _ => {}
             }
-        } else {
-            // Reset the 'g' sequence if we time out waiting for the second 'g'
         }
 
         // Check if it's time for a tick update
         if last_tick.elapsed() >= tick_rate {
-            last_tick = Instant::now();
-            // Call the app's tick method to update time-based state
             app.tick();
+            last_tick = Instant::now();
         }
     }
-
-    Ok(())
 }
