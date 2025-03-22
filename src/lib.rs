@@ -666,3 +666,289 @@ impl<T: std::fmt::Debug> Istari<T> {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    #[derive(Debug)]
+    struct TestState {
+        counter: i32,
+    }
+
+    #[test]
+    fn test_menu_creation() {
+        let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
+        assert_eq!(menu.title, "Test Menu");
+        assert!(menu.items.is_empty());
+        assert!(menu.parent.is_none());
+    }
+
+    #[test]
+    fn test_menu_item_creation() {
+        let item = MenuItem::new_action(
+            "1".to_string(),
+            "Test Action".to_string(),
+            |state: &mut TestState, _params: Option<&str>| {
+                state.counter += 1;
+                Some("Action executed".to_string())
+            },
+        );
+        assert_eq!(item.key, "1");
+        assert_eq!(item.description, "Test Action");
+        assert!(item.action.is_some());
+        assert!(item.submenu.is_none());
+    }
+
+    #[test]
+    fn test_menu_validation_duplicate_keys() {
+        let mut menu: Menu<TestState> = Menu::new("Test Menu".to_string());
+        
+        // Add first action
+        menu.add_action(
+            "1".to_string(),
+            "First Action".to_string(),
+            |_state: &mut TestState, _params: Option<&str>| Some("First".to_string()),
+        );
+        
+        // Add duplicate key
+        menu.add_action(
+            "1".to_string(),
+            "Duplicate Action".to_string(),
+            |_state: &mut TestState, _params: Option<&str>| Some("Second".to_string()),
+        );
+        
+        // Try to create Istari with invalid menu
+        let state = TestState { counter: 0 };
+        let result = Istari::new(menu, state);
+        
+        assert!(result.is_err());
+        if let Err(IstariError::DuplicateCommand(key, menu_title)) = result {
+            assert_eq!(key, "1");
+            assert_eq!(menu_title, "Test Menu");
+        } else {
+            panic!("Expected DuplicateCommand error");
+        }
+    }
+
+    #[test]
+    fn test_menu_validation_reserved_keys() {
+        let mut menu: Menu<TestState> = Menu::new("Test Menu".to_string());
+        
+        // Add action with reserved key 'q'
+        menu.add_action(
+            "q".to_string(),
+            "Reserved Key Action".to_string(),
+            |_state: &mut TestState, _params: Option<&str>| Some("Reserved".to_string()),
+        );
+        
+        // Try to create Istari with invalid menu
+        let state = TestState { counter: 0 };
+        let result = Istari::new(menu, state);
+        
+        assert!(result.is_err());
+        if let Err(IstariError::ReservedCommand(key, menu_title)) = result {
+            assert_eq!(key, "q");
+            assert_eq!(menu_title, "Test Menu");
+        } else {
+            panic!("Expected ReservedCommand error");
+        }
+    }
+
+    #[test]
+    fn test_menu_validation_nested_duplicate_keys() {
+        let mut root_menu: Menu<TestState> = Menu::new("Root Menu".to_string());
+        let mut submenu: Menu<TestState> = Menu::new("Submenu".to_string());
+        
+        // Add duplicate keys in submenu
+        submenu.add_action(
+            "1".to_string(),
+            "First Action".to_string(),
+            |_state: &mut TestState, _params: Option<&str>| Some("First".to_string()),
+        );
+        
+        submenu.add_action(
+            "1".to_string(),
+            "Duplicate Action".to_string(),
+            |_state: &mut TestState, _params: Option<&str>| Some("Second".to_string()),
+        );
+        
+        root_menu.add_submenu("s".to_string(), "Go to Submenu".to_string(), submenu);
+        
+        // Try to create Istari with invalid menu
+        let state = TestState { counter: 0 };
+        let result = Istari::new(root_menu, state);
+        
+        assert!(result.is_err());
+        if let Err(IstariError::DuplicateCommand(key, menu_title)) = result {
+            assert_eq!(key, "1");
+            assert_eq!(menu_title, "Submenu");
+        } else {
+            panic!("Expected DuplicateCommand error");
+        }
+    }
+
+    #[test]
+    fn test_menu_validation_nested_reserved_keys() {
+        let mut root_menu: Menu<TestState> = Menu::new("Root Menu".to_string());
+        let mut submenu: Menu<TestState> = Menu::new("Submenu".to_string());
+        
+        // Add action with reserved key in submenu
+        submenu.add_action(
+            "q".to_string(),
+            "Reserved Key Action".to_string(),
+            |_state: &mut TestState, _params: Option<&str>| Some("Reserved".to_string()),
+        );
+        
+        root_menu.add_submenu("s".to_string(), "Go to Submenu".to_string(), submenu);
+        
+        // Try to create Istari with invalid menu
+        let state = TestState { counter: 0 };
+        let result = Istari::new(root_menu, state);
+        
+        assert!(result.is_err());
+        if let Err(IstariError::ReservedCommand(key, menu_title)) = result {
+            assert_eq!(key, "q");
+            assert_eq!(menu_title, "Submenu");
+        } else {
+            panic!("Expected ReservedCommand error");
+        }
+    }
+
+    #[test]
+    fn test_menu_navigation() {
+        let mut root_menu: Menu<TestState> = Menu::new("Root".to_string());
+        let mut submenu: Menu<TestState> = Menu::new("Submenu".to_string());
+        
+        submenu.add_action(
+            "1".to_string(),
+            "Submenu Action".to_string(),
+            |state: &mut TestState, _params: Option<&str>| {
+                state.counter += 1;
+                Some("Submenu action executed".to_string())
+            },
+        );
+        
+        root_menu.add_submenu("s".to_string(), "Go to Submenu".to_string(), submenu);
+        
+        let item = root_menu.get_item("s").unwrap();
+        assert!(item.submenu.is_some());
+        
+        let submenu = item.submenu.as_ref().unwrap().lock().unwrap();
+        assert_eq!(submenu.title, "Submenu");
+        assert_eq!(submenu.items.len(), 1);
+    }
+
+    #[test]
+    fn test_istari_creation() {
+        let state = TestState { counter: 0 };
+        let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
+        
+        let result = Istari::new(menu, state);
+        assert!(result.is_ok());
+        
+        let app = result.unwrap();
+        assert_eq!(app.mode(), Mode::Command);
+        assert!(app.output_messages().is_empty());
+        assert!(!app.show_input());
+    }
+
+    #[test]
+    fn test_mode_toggling() {
+        let state = TestState { counter: 0 };
+        let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
+        let mut app = Istari::new(menu, state).unwrap();
+        
+        assert_eq!(app.mode(), Mode::Command);
+        app.toggle_mode();
+        assert_eq!(app.mode(), Mode::Scroll);
+        app.toggle_mode();
+        assert_eq!(app.mode(), Mode::Command);
+        
+        app.set_mode(Mode::Scroll);
+        assert_eq!(app.mode(), Mode::Scroll);
+    }
+
+    #[test]
+    fn test_input_buffer() {
+        let state = TestState { counter: 0 };
+        let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
+        let mut app = Istari::new(menu, state).unwrap();
+        
+        assert!(app.input_buffer().is_empty());
+        app.add_to_input_buffer('t');
+        app.add_to_input_buffer('e');
+        app.add_to_input_buffer('s');
+        app.add_to_input_buffer('t');
+        assert_eq!(app.input_buffer(), "test");
+        
+        app.backspace_input_buffer();
+        assert_eq!(app.input_buffer(), "tes");
+        
+        app.clear_input_buffer();
+        assert!(app.input_buffer().is_empty());
+    }
+
+    #[test]
+    fn test_output_messages() {
+        let state = TestState { counter: 0 };
+        let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
+        let mut app = Istari::new(menu, state).unwrap();
+        
+        assert!(app.output_messages().is_empty());
+        app.add_output("Test message".to_string());
+        assert_eq!(app.output_messages().len(), 1);
+        assert_eq!(app.output_messages()[0], "Test message");
+        
+        assert!(app.has_new_output());
+        assert!(!app.has_new_output());
+    }
+
+    #[test]
+    fn test_tick_handler() {
+        let state = TestState { counter: 0 };
+        let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
+        let mut app = Istari::new(menu, state)
+            .unwrap()
+            .with_tick_handler(|state: &mut TestState, messages: &mut Vec<String>, _delta: f32| {
+                state.counter += 1;
+                messages.push(format!("Tick: {}", state.counter));
+            });
+        
+        // Simulate a tick
+        app.tick();
+        assert_eq!(app.output_messages().len(), 1);
+        assert_eq!(app.output_messages()[0], "Tick: 1");
+    }
+
+    #[test]
+    fn test_menu_item_clone() {
+        let item = MenuItem::new_action(
+            "1".to_string(),
+            "Test Action".to_string(),
+            |_state: &mut TestState, _params: Option<&str>| Some("Action".to_string()),
+        );
+        
+        let cloned = item.clone();
+        assert_eq!(cloned.key, item.key);
+        assert_eq!(cloned.description, item.description);
+        assert!(cloned.action.is_none()); // Action should be None in clone
+        assert!(cloned.submenu.is_none());
+    }
+
+    #[test]
+    fn test_menu_debug() {
+        let mut menu: Menu<TestState> = Menu::new("Test Menu".to_string());
+        menu.add_action(
+            "1".to_string(),
+            "Test Action".to_string(),
+            |_state: &mut TestState, _params: Option<&str>| Some("Action".to_string()),
+        );
+        
+        let debug_string = format!("{:?}", menu);
+        assert!(debug_string.contains("Test Menu"));
+        assert!(debug_string.contains("Test Action"));
+    }
+}
