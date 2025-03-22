@@ -104,13 +104,14 @@ fn print_menu<T: std::fmt::Debug>(app: &crate::Istari<T>) {
 }
 
 /// Print output messages
-fn print_output<T: std::fmt::Debug>(app: &crate::Istari<T>) {
-    let messages = app.output_messages();
+fn print_output<T: std::fmt::Debug>(app: &mut crate::Istari<T>) {
+    let messages = app.output_messages().to_vec(); // Clone the messages
     if !messages.is_empty() {
         println!("\n----- Output -----");
         for msg in messages {
             println!("{}", msg);
         }
         println!("-----------------");
+        app.clear_output_messages(); // Clear messages after printing
     }
 }

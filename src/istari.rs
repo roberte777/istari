@@ -104,6 +104,12 @@ impl<T: std::fmt::Debug> Istari<T> {
         has_new
     }
 
+    /// Clear all output messages
+    pub fn clear_output_messages(&mut self) {
+        self.output_messages.clear();
+        self.new_output = false;
+    }
+
     /// Handle a tick update
     /// This is called regularly to update any time-based state
     pub fn tick(&mut self) {
