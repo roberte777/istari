@@ -1,6 +1,9 @@
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use std::future::Future;
+use futures::future::BoxFuture;
+use tokio;
 
 pub mod rendering;
 
@@ -13,22 +16,54 @@ pub enum Mode {
     Scroll,
 }
 
-/// Type for action functions that can be executed when menu items are selected
+/// Marker structs to differentiate between sync and async functions
+pub struct SyncFnMarker;
+pub struct AsyncFnMarker;
+
+/// Type for synchronous action functions that can be executed when menu items are selected
 pub type ActionFn<T> = Box<dyn Fn(&mut T, Option<&str>) -> Option<String> + Send + Sync>;
+
+/// Type for asynchronous action functions that can be executed when menu items are selected
+pub type AsyncActionFn<T> = Box<dyn Fn(&mut T, Option<&str>) -> BoxFuture<'static, Option<String>> + Send + Sync>;
+
+/// Represents either a synchronous or asynchronous action function
+pub enum ActionType<T> {
+    /// A synchronous action function
+    Sync(ActionFn<T>),
+    /// An asynchronous action function
+    Async(AsyncActionFn<T>),
+}
+
 pub type TickFn<T> = Box<dyn Fn(&mut T, &mut Vec<String>, f32) + Send + Sync>;
 
 /// A trait for converting closures to ActionFn
-pub trait IntoActionFn<T>: Send + Sync + 'static {
-    fn into_action_fn(self) -> ActionFn<T>;
+pub trait IntoActionFn<T, Marker>: Send + Sync + 'static {
+    fn into_action_fn(self) -> ActionType<T>;
 }
 
-/// Implementation for closures that can be converted to ActionFn
-impl<T, F> IntoActionFn<T> for F
+/// Implementation for synchronous closures that can be converted to ActionFn
+impl<T, F> IntoActionFn<T, SyncFnMarker> for F
 where
     F: Fn(&mut T, Option<&str>) -> Option<String> + Send + Sync + 'static,
 {
-    fn into_action_fn(self) -> ActionFn<T> {
-        Box::new(self)
+    fn into_action_fn(self) -> ActionType<T> {
+        ActionType::Sync(Box::new(self))
+    }
+}
+
+/// Implementation for asynchronous closures that can be converted to ActionFn
+impl<T, F, Fut> IntoActionFn<T, AsyncFnMarker> for F
+where
+    F: Fn(&mut T, Option<&str>) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Option<String>> + Send + 'static,
+{
+    fn into_action_fn(self) -> ActionType<T> {
+        ActionType::Async(Box::new(move |state, params| {
+            // Clone self to ensure the future doesn't reference the original closure
+            let fut = self(state, params);
+            // Convert the future to a BoxFuture
+            Box::pin(fut)
+        }))
     }
 }
 
@@ -54,7 +89,7 @@ pub struct MenuItem<T> {
     /// Description of what this item does
     pub description: String,
     /// The function to run when this item is selected
-    pub action: Option<ActionFn<T>>,
+    pub action: Option<ActionType<T>>,
     /// A submenu that this item leads to, if any
     pub submenu: Option<Arc<Mutex<Menu<T>>>>,
 }
@@ -89,10 +124,10 @@ impl<T: std::fmt::Debug> fmt::Debug for MenuItem<T> {
 }
 
 impl<T> MenuItem<T> {
-    /// Create a new menu item with an action
-    pub fn new_action<F>(key: char, description: String, action: F) -> Self
+    /// Create a new menu item with a synchronous action
+    pub fn new_action<F, Marker>(key: char, description: String, action: F) -> Self
     where
-        F: IntoActionFn<T>,
+        F: IntoActionFn<T, Marker>,
     {
         MenuItem {
             key,
@@ -150,15 +185,15 @@ impl<T> Menu<T> {
         self
     }
 
-    /// Add an action item to this menu
-    pub fn add_action<F>(
+    /// Add a synchronous action item to this menu
+    pub fn add_action<F, Marker>(
         &mut self,
         key: char,
         description: impl Into<String>,
         action: F,
     ) -> &mut Self
     where
-        F: IntoActionFn<T>,
+        F: IntoActionFn<T, Marker>,
     {
         self.add_item(MenuItem::new_action(key, description.into(), action))
     }
@@ -201,6 +236,8 @@ pub struct Istari<T> {
     input_buffer: String,
     /// Whether the command input should be displayed
     show_input: bool,
+    /// Tokio runtime for executing async actions
+    runtime: tokio::runtime::Runtime,
 }
 
 impl<T: std::fmt::Debug> Istari<T> {
@@ -216,6 +253,7 @@ impl<T: std::fmt::Debug> Istari<T> {
             current_mode: Mode::Command, // Default to command mode
             input_buffer: String::new(),
             show_input: false,
+            runtime: tokio::runtime::Runtime::new().unwrap(),
         }
     }
 
@@ -398,7 +436,17 @@ impl<T: std::fmt::Debug> Istari<T> {
             // Get the action and call it directly
             let action = item.action.as_ref().unwrap();
             let params_ref = params.as_deref();
-            action(&mut self.state, params_ref)
+
+            match action {
+                ActionType::Sync(sync_fn) => sync_fn(&mut self.state, params_ref),
+                ActionType::Async(async_fn) => {
+                    // Use the shared runtime instead of creating a new one
+                    self.runtime.block_on(async {
+                        let future = async_fn(&mut self.state, params_ref);
+                        future.await
+                    })
+                }
+            }
         };
 
         // Return the result

@@ -1,4 +1,4 @@
-use istari::{Istari, Menu, Mode};
+use istari::{Istari, Menu};
 use std::io;
 
 fn main() -> io::Result<()> {
