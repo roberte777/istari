@@ -188,11 +188,7 @@ fn main() -> io::Result<()> {
     // Add the info submenu to the root menu
     root_menu.add_submenu('i', "Mode Information", mode_info);
 
-    // Create and run the application
-    let mut app = Istari::new(root_menu, state);
-
-    // Run the application
-    app.run()?;
-
-    Ok(())
+    // Create and run our application
+    let mut app = Istari::new(root_menu, state).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    app.run()
 }

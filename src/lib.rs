@@ -4,8 +4,22 @@ use std::time::Instant;
 use std::future::Future;
 use futures::future::BoxFuture;
 use tokio;
+use thiserror::Error;
 
 pub mod rendering;
+
+/// Error types for Istari
+#[derive(Error, Debug)]
+pub enum IstariError {
+    #[error("Duplicate command key '{0}' in menu '{1}'")]
+    DuplicateCommand(String, String),
+    
+    #[error("Reserved command key '{0}' in menu '{1}'")]
+    ReservedCommand(String, String),
+}
+
+/// Reserved command keys that cannot be used in menus
+const RESERVED_KEYS: [&str; 2] = ["q", "b"];
 
 /// Defines the possible application modes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -242,8 +256,11 @@ pub struct Istari<T> {
 
 impl<T: std::fmt::Debug> Istari<T> {
     /// Create a new Istari application with the given root menu and state
-    pub fn new(root_menu: Menu<T>, state: T) -> Self {
-        Self {
+    pub fn new(root_menu: Menu<T>, state: T) -> Result<Self, IstariError> {
+        // Validate the menu structure
+        Self::validate_menu(&root_menu)?;
+
+        Ok(Self {
             current_menu: Arc::new(Mutex::new(root_menu)),
             state,
             output_messages: Vec::new(),
@@ -254,7 +271,32 @@ impl<T: std::fmt::Debug> Istari<T> {
             input_buffer: String::new(),
             show_input: false,
             runtime: tokio::runtime::Runtime::new().unwrap(),
+        })
+    }
+
+    /// Validate menu structure to ensure no duplicate or reserved keys
+    fn validate_menu(menu: &Menu<T>) -> Result<(), IstariError> {
+        let mut seen_keys = std::collections::HashSet::new();
+        
+        // Check for duplicate and reserved keys in this menu
+        for item in &menu.items {
+            // Check if key is reserved
+            if RESERVED_KEYS.contains(&item.key.as_str()) {
+                return Err(IstariError::ReservedCommand(item.key.clone(), menu.title.clone()));
+            }
+            
+            // Check if key is a duplicate
+            if !seen_keys.insert(item.key.clone()) {
+                return Err(IstariError::DuplicateCommand(item.key.clone(), menu.title.clone()));
+            }
+            
+            // Recursively validate submenu if it exists
+            if let Some(submenu) = &item.submenu {
+                Self::validate_menu(&submenu.lock().unwrap())?;
+            }
         }
+        
+        Ok(())
     }
 
     /// Set a custom tick handler
@@ -311,9 +353,8 @@ impl<T: std::fmt::Debug> Istari<T> {
     }
 
     /// Process a single character key command, potentially with parameters
-    pub fn handle_key_with_params(&mut self, key: char, params: Option<String>) -> bool {
-        // Convert the char to a String for compatibility
-        let key_str = key.to_string();
+    pub fn handle_key_with_params(&mut self, key: impl Into<String>, params: Option<String>) -> bool {
+        let key_string = key.into();
         
         // First find information about the matching item, keeping lock short
         let (has_submenu, has_action, idx) = {
@@ -323,7 +364,7 @@ impl<T: std::fmt::Debug> Istari<T> {
             let mut has_action = false;
 
             for (idx, item) in menu.items.iter().enumerate() {
-                if item.key == key_str {
+                if item.key == key_string {
                     has_submenu = item.submenu.is_some();
                     has_action = item.action.is_some();
                     found_idx = Some(idx);
@@ -374,7 +415,7 @@ impl<T: std::fmt::Debug> Istari<T> {
         }
 
         // Handle special keys
-        if key == 'q' {
+        if key_string == "q" {
             // Only quit from root menu
             let is_root = {
                 let menu = self.current_menu.lock().unwrap();
@@ -389,7 +430,7 @@ impl<T: std::fmt::Debug> Istari<T> {
                         .to_string(),
                 );
             }
-        } else if key == 'b' {
+        } else if key_string == "b" {
             // Back navigation
             let parent = {
                 let menu = self.current_menu.lock().unwrap();
@@ -403,7 +444,7 @@ impl<T: std::fmt::Debug> Istari<T> {
             }
         } else {
             // Unknown key
-            self.add_output(format!("Unknown command: {}", key));
+            self.add_output(format!("Unknown command: {}", key_string));
         }
 
         true
@@ -457,7 +498,7 @@ impl<T: std::fmt::Debug> Istari<T> {
     }
 
     /// Original handle_key method that delegates to handle_key_with_params
-    pub fn handle_key(&mut self, key: char) -> bool {
+    pub fn handle_key(&mut self, key: impl Into<String>) -> bool {
         self.handle_key_with_params(key, None)
     }
 
@@ -560,14 +601,13 @@ impl<T: std::fmt::Debug> Istari<T> {
                 self.add_output("Already at root menu".to_string());
             }
         } else {
-            // Find menu item matching the command string
+            // Try to match on the command key
             let (has_submenu, has_action, idx) = {
                 let menu = self.current_menu.lock().unwrap();
                 let mut found_idx = None;
                 let mut has_submenu = false;
                 let mut has_action = false;
 
-                // Try exact match on the key
                 for (idx, item) in menu.items.iter().enumerate() {
                     if item.key.to_lowercase() == command {
                         has_submenu = item.submenu.is_some();

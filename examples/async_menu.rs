@@ -117,8 +117,6 @@ fn main() -> io::Result<()> {
     );
 
     // Create and run the application
-    let mut app = Istari::new(root_menu, state);
-    app.run()?;
-
-    Ok(())
+    let mut app = Istari::new(root_menu, state).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    app.run()
 } 

@@ -141,7 +141,9 @@ fn main() -> io::Result<()> {
     };
 
     // Create the Istari app with our custom tick handler
-    let mut app = Istari::new(root_menu, state).with_tick_handler(tick_handler);
+    let mut app = Istari::new(root_menu, state)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
+        .with_tick_handler(tick_handler);
 
     app.run()?;
 

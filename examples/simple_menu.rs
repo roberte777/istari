@@ -45,7 +45,7 @@ fn main() -> io::Result<()> {
     );
 
     root_menu.add_action(
-    "inc",
+        "dec",
         "Decrement Counter (optional amount)",
         |state: &mut AppState, params: Option<&str>| {
             let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
@@ -114,11 +114,7 @@ fn main() -> io::Result<()> {
     // Add the submenu to the root menu
     root_menu.add_submenu('s', "Settings", submenu);
 
-    // Create and run the application
-    let mut app = Istari::new(root_menu, state);
-
-    // Run the application
-    app.run()?;
-
-    Ok(())
+    // Create and run our application
+    let mut app = Istari::new(root_menu, state).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    app.run()
 }
