@@ -3,8 +3,6 @@
 A modern terminal UI menu framework powered by [ratatui](https://github.com/ratatui-org/ratatui),
 enabling you to quickly build interactive terminal applications with beautiful menus and rich UI.
 
-![Terminal menu system](https://placekitten.com/800/300)
-
 ## ✨ Features
 
 - **Hierarchical Menus** - Create nested menu structures with intuitive navigation
