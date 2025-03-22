@@ -48,6 +48,7 @@ pub fn run<T: std::fmt::Debug>(app: &mut crate::Istari<T>) -> io::Result<()> {
             if has_parent {
                 // Navigate back
                 let success = app.handle_key("b");
+                println!("\n");
                 if !success {
                     // If handle_key returns false, it means we should exit
                     break;

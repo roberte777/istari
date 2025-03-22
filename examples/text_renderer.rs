@@ -30,10 +30,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Add some items to the menu
     root_menu.add_action(
         "inc",
-        "Increment counter",
-        |state: &mut AppState, _params: Option<&str>| {
-            state.counter += 1;
-            Some(format!("Counter incremented to {}", state.counter))
+        "Increment counter (optional amount)",
+        |state: &mut AppState, params: Option<&str>| {
+            let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
+            state.counter += amount;
+            Some(format!(
+                "Counter incremented by {} to {}",
+                amount, state.counter
+            ))
         },
     );
 
