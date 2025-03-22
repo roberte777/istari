@@ -567,25 +567,13 @@ impl<T: std::fmt::Debug> Istari<T> {
                 let mut has_submenu = false;
                 let mut has_action = false;
 
-                // First try exact match on the key
+                // Try exact match on the key
                 for (idx, item) in menu.items.iter().enumerate() {
                     if item.key.to_lowercase() == command {
                         has_submenu = item.submenu.is_some();
                         has_action = item.action.is_some();
                         found_idx = Some(idx);
                         break;
-                    }
-                }
-
-                // If no match, try description match as fallback
-                if found_idx.is_none() {
-                    for (idx, item) in menu.items.iter().enumerate() {
-                        if item.description.to_lowercase().contains(&command) {
-                            has_submenu = item.submenu.is_some();
-                            has_action = item.action.is_some();
-                            found_idx = Some(idx);
-                            break;
-                        }
                     }
                 }
 

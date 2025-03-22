@@ -32,7 +32,7 @@ fn main() -> io::Result<()> {
 
     // Add some simple actions that return output strings
     root_menu.add_action(
-        '1',
+        "inc",
         "Increment Counter (optional amount)",
         |state: &mut AppState, params: Option<&str>| {
             let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
@@ -45,7 +45,7 @@ fn main() -> io::Result<()> {
     );
 
     root_menu.add_action(
-        '2',
+    "inc",
         "Decrement Counter (optional amount)",
         |state: &mut AppState, params: Option<&str>| {
             let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
