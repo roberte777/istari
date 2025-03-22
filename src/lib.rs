@@ -85,7 +85,7 @@ where
 /// A menu item that can be selected
 pub struct MenuItem<T> {
     /// The key that activates this item
-    pub key: char,
+    pub key: String,
     /// Description of what this item does
     pub description: String,
     /// The function to run when this item is selected
@@ -97,7 +97,7 @@ pub struct MenuItem<T> {
 impl<T> Clone for MenuItem<T> {
     fn clone(&self) -> Self {
         MenuItem {
-            key: self.key,
+            key: self.key.clone(),
             description: self.description.clone(),
             action: None, // We can't clone the action function, so we set it to None
             submenu: self.submenu.clone(),
@@ -125,12 +125,12 @@ impl<T: std::fmt::Debug> fmt::Debug for MenuItem<T> {
 
 impl<T> MenuItem<T> {
     /// Create a new menu item with a synchronous action
-    pub fn new_action<F, Marker>(key: char, description: String, action: F) -> Self
+    pub fn new_action<F, Marker>(key: impl Into<String>, description: String, action: F) -> Self
     where
         F: IntoActionFn<T, Marker>,
     {
         MenuItem {
-            key,
+            key: key.into(),
             description,
             action: Some(action.into_action_fn()),
             submenu: None,
@@ -138,9 +138,9 @@ impl<T> MenuItem<T> {
     }
 
     /// Create a new menu item with a submenu
-    pub fn new_submenu(key: char, description: String, submenu: Menu<T>) -> Self {
+    pub fn new_submenu(key: impl Into<String>, description: String, submenu: Menu<T>) -> Self {
         MenuItem {
-            key,
+            key: key.into(),
             description,
             action: None,
             submenu: Some(Arc::new(Mutex::new(submenu))),
@@ -188,7 +188,7 @@ impl<T> Menu<T> {
     /// Add a synchronous action item to this menu
     pub fn add_action<F, Marker>(
         &mut self,
-        key: char,
+        key: impl Into<String>,
         description: impl Into<String>,
         action: F,
     ) -> &mut Self
@@ -201,7 +201,7 @@ impl<T> Menu<T> {
     /// Add a submenu to this menu
     pub fn add_submenu(
         &mut self,
-        key: char,
+        key: impl Into<String>,
         description: impl Into<String>,
         mut submenu: Menu<T>,
     ) -> &mut Self {
@@ -211,7 +211,7 @@ impl<T> Menu<T> {
     }
 
     /// Get the item for a given key
-    pub fn get_item(&self, key: char) -> Option<&MenuItem<T>> {
+    pub fn get_item(&self, key: &str) -> Option<&MenuItem<T>> {
         self.items.iter().find(|item| item.key == key)
     }
 }
@@ -312,6 +312,9 @@ impl<T: std::fmt::Debug> Istari<T> {
 
     /// Process a single character key command, potentially with parameters
     pub fn handle_key_with_params(&mut self, key: char, params: Option<String>) -> bool {
+        // Convert the char to a String for compatibility
+        let key_str = key.to_string();
+        
         // First find information about the matching item, keeping lock short
         let (has_submenu, has_action, idx) = {
             let menu = self.current_menu.lock().unwrap();
@@ -320,7 +323,7 @@ impl<T: std::fmt::Debug> Istari<T> {
             let mut has_action = false;
 
             for (idx, item) in menu.items.iter().enumerate() {
-                if item.key == key {
+                if item.key == key_str {
                     has_submenu = item.submenu.is_some();
                     has_action = item.action.is_some();
                     found_idx = Some(idx);
@@ -556,25 +559,33 @@ impl<T: std::fmt::Debug> Istari<T> {
             } else {
                 self.add_output("Already at root menu".to_string());
             }
-        } else if command.len() == 1 {
-            // For backward compatibility with single-character commands
-            if let Some(c) = command.chars().next() {
-                result = self.handle_key_with_params(c, params);
-            }
         } else {
-            // Multi-character command processing - find matching menu item
+            // Find menu item matching the command string
             let (has_submenu, has_action, idx) = {
                 let menu = self.current_menu.lock().unwrap();
                 let mut found_idx = None;
                 let mut has_submenu = false;
                 let mut has_action = false;
 
+                // First try exact match on the key
                 for (idx, item) in menu.items.iter().enumerate() {
-                    if item.description.to_lowercase().contains(&command) {
+                    if item.key.to_lowercase() == command {
                         has_submenu = item.submenu.is_some();
                         has_action = item.action.is_some();
                         found_idx = Some(idx);
                         break;
+                    }
+                }
+
+                // If no match, try description match as fallback
+                if found_idx.is_none() {
+                    for (idx, item) in menu.items.iter().enumerate() {
+                        if item.description.to_lowercase().contains(&command) {
+                            has_submenu = item.submenu.is_some();
+                            has_action = item.action.is_some();
+                            found_idx = Some(idx);
+                            break;
+                        }
                     }
                 }
 
