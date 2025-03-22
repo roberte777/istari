@@ -66,7 +66,7 @@ fn main() -> io::Result<()> {
             // Capture values by value, not by reference
             let new_counter = state.async_counter;
 
-            Box::pin(async move {
+            async move {
                 // Simulate some async work
                 tokio::time::sleep(Duration::from_millis(delay_ms)).await;
 
@@ -74,7 +74,7 @@ fn main() -> io::Result<()> {
                     "Async counter incremented by {} to {} (after {}ms delay)",
                     amount, new_counter, delay_ms
                 ))
-            })
+            }
         },
     );
 
@@ -92,7 +92,7 @@ fn main() -> io::Result<()> {
             // Capture values by value, not by reference
             let new_counter = state.async_counter;
 
-            Box::pin(async move {
+            async move {
                 // Simulate some async work
                 tokio::time::sleep(Duration::from_millis(delay_ms)).await;
 
@@ -100,7 +100,7 @@ fn main() -> io::Result<()> {
                     "Async counter decremented by {} to {} (after {}ms delay)",
                     amount, new_counter, delay_ms
                 ))
-            })
+            }
         },
     );
 
