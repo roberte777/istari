@@ -189,7 +189,7 @@ impl Renderer {
                         .style(Style::default().fg(Color::Gray))
                 },
                 Mode::Scroll => {
-                    Paragraph::new("SCROLL MODE: Tab to exit | j/k Scroll | u/d Page | gg/G Top/Bottom | Ctrl+A Toggle auto-scroll")
+                    Paragraph::new("SCROLL MODE: Tab to exit | j/k Scroll | u/d Page | g/G Top/Bottom | Ctrl+A Toggle auto-scroll")
                         .style(Style::default().fg(Color::Yellow))
                 }
             };
@@ -263,7 +263,6 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
     // Define the tick rate (how often to redraw)
     let tick_rate = Duration::from_millis(100);
     let mut last_tick = Instant::now();
-    let mut last_key = None; // Track the last key pressed for 'gg' sequence
 
     loop {
         // Render the current state
@@ -284,12 +283,10 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
                             // Clear input when in command mode
                             app.clear_input_buffer();
                         }
-                        last_key = None;
                     }
                     // Handle Tab key to switch between modes
                     crossterm::event::KeyCode::Tab => {
                         app.toggle_mode();
-                        last_key = None;
                     }
                     // Handle Ctrl+Q to quit from anywhere
                     crossterm::event::KeyCode::Char('q')
@@ -306,14 +303,12 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
                                 break;
                             }
                         }
-                        last_key = None;
                     }
                     // Handle backspace to delete from input buffer
                     crossterm::event::KeyCode::Backspace => {
                         if app.mode() == Mode::Command {
                             app.backspace_input_buffer();
                         }
-                        last_key = None;
                     }
                     crossterm::event::KeyCode::Char(c) => {
                         match app.mode() {
@@ -380,15 +375,10 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
                                     }
                                     // vim-style to top: gg (need to track state)
                                     'g' => {
-                                        if last_key == Some('g') {
-                                            // We got "gg" - go to top
-                                            renderer.output_scroll = 0;
-                                            // Disable auto-scroll when going to top
-                                            renderer.auto_scroll = false;
-                                            last_key = None; // Reset the sequence
-                                        } else {
-                                            last_key = Some('g');
-                                        }
+                                        // We got "g" - go to top
+                                        renderer.output_scroll = 0;
+                                        // Disable auto-scroll when going to top
+                                        renderer.auto_scroll = false;
                                     }
                                     'a' if key
                                         .modifiers
@@ -402,7 +392,6 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
                                         }
                                     }
                                     _ => {
-                                        last_key = None;
                                     }
                                 }
                             }
@@ -415,7 +404,6 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
                             // Disable auto-scroll when manually scrolling up
                             renderer.auto_scroll = false;
                         }
-                        last_key = None;
                     }
                     crossterm::event::KeyCode::Down => {
                         // We'll check the max scroll in render()
@@ -428,14 +416,12 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
                         if renderer.output_scroll >= max_scroll.saturating_sub(1) {
                             renderer.auto_scroll = true;
                         }
-                        last_key = None;
                     }
                     // Page Up/Down for faster scrolling
                     crossterm::event::KeyCode::PageUp => {
                         renderer.output_scroll = renderer.output_scroll.saturating_sub(10);
                         // Disable auto-scroll when manually scrolling up
                         renderer.auto_scroll = false;
-                        last_key = None;
                     }
                     crossterm::event::KeyCode::PageDown => {
                         renderer.output_scroll += 10;
@@ -448,30 +434,25 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
                         if renderer.output_scroll >= max_scroll.saturating_sub(1) {
                             renderer.auto_scroll = true;
                         }
-                        last_key = None;
                     }
                     // Home/End keys for jumping to top/bottom
                     crossterm::event::KeyCode::Home => {
                         renderer.output_scroll = 0;
                         // Disable auto-scroll when going to top
                         renderer.auto_scroll = false;
-                        last_key = None;
                     }
                     crossterm::event::KeyCode::End => {
                         // Set to a large value, will be clamped in render
                         renderer.output_scroll = usize::MAX;
                         // Enable auto-scroll when going to bottom
                         renderer.auto_scroll = true;
-                        last_key = None;
                     }
                     _ => {
-                        last_key = None;
                     }
                 }
             }
         } else {
             // Reset the 'g' sequence if we time out waiting for the second 'g'
-            last_key = None;
         }
 
         // Check if it's time for a tick update
