@@ -53,12 +53,14 @@ impl AnimatedState {
                         return Some("Timer completed!".to_string());
                     } else {
                         let remaining = self.timer_duration.as_secs() - elapsed.as_secs();
-                        return Some(format!("{} (Timer: {}s remaining)", 
-                                  self.animation_frames[self.animation_frame], remaining));
+                        return Some(format!(
+                            "{} (Timer: {}s remaining)",
+                            self.animation_frames[self.animation_frame], remaining
+                        ));
                     }
                 }
             }
-            
+
             return Some(self.animation_frames[self.animation_frame].clone());
         }
         None
@@ -73,42 +75,64 @@ fn main() -> io::Result<()> {
     let mut root_menu = Menu::new("Animated Demo");
 
     // Add actions
-    root_menu.add_action('1', "Increment Counter (optional amount)", |state: &mut AnimatedState, params: Option<&str>| {
-        let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
-        state.counter += amount;
-        Some(format!("Counter incremented by {} to {}", amount, state.counter))
-    });
-    
-    root_menu.add_action('2', "Decrement Counter (optional amount)", |state: &mut AnimatedState, params: Option<&str>| {
-        let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
-        state.counter -= amount;
-        Some(format!("Counter decremented by {} to {}", amount, state.counter))
-    });
+    root_menu.add_action(
+        '1',
+        "Increment Counter (optional amount)",
+        |state: &mut AnimatedState, params: Option<&str>| {
+            let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
+            state.counter += amount;
+            Some(format!(
+                "Counter incremented by {} to {}",
+                amount, state.counter
+            ))
+        },
+    );
 
-    root_menu.add_action('t', "Start Timer (seconds)", |state: &mut AnimatedState, params: Option<&str>| {
-        let seconds = params.and_then(|p| p.parse::<u64>().ok()).unwrap_or(10);
-        state.timer_active = true;
-        state.timer_start = Some(Instant::now());
-        state.timer_duration = Duration::from_secs(seconds);
-        Some(format!("Timer started! ({} seconds)", seconds))
-    });
-    
-    root_menu.add_action('a', "Toggle Animation", |state: &mut AnimatedState, _params: Option<&str>| {
-        state.timer_active = !state.timer_active;
-        if state.timer_active {
-            state.timer_start = None; // Don't count down, just animate
-            Some("Animation started!".to_string())
-        } else {
-            Some("Animation stopped!".to_string())
-        }
-    });
+    root_menu.add_action(
+        '2',
+        "Decrement Counter (optional amount)",
+        |state: &mut AnimatedState, params: Option<&str>| {
+            let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
+            state.counter -= amount;
+            Some(format!(
+                "Counter decremented by {} to {}",
+                amount, state.counter
+            ))
+        },
+    );
+
+    root_menu.add_action(
+        't',
+        "Start Timer (seconds)",
+        |state: &mut AnimatedState, params: Option<&str>| {
+            let seconds = params.and_then(|p| p.parse::<u64>().ok()).unwrap_or(10);
+            state.timer_active = true;
+            state.timer_start = Some(Instant::now());
+            state.timer_duration = Duration::from_secs(seconds);
+            Some(format!("Timer started! ({} seconds)", seconds))
+        },
+    );
+
+    root_menu.add_action(
+        'a',
+        "Toggle Animation",
+        |state: &mut AnimatedState, _params: Option<&str>| {
+            state.timer_active = !state.timer_active;
+            if state.timer_active {
+                state.timer_start = None; // Don't count down, just animate
+                Some("Animation started!".to_string())
+            } else {
+                Some("Animation stopped!".to_string())
+            }
+        },
+    );
 
     // Define the animation tick handler
     let tick_handler = |state: &mut AnimatedState, messages: &mut Vec<String>, _delta: f32| {
         // Update animation and add output message if needed
         if let Some(message) = state.update_animation() {
             messages.push(message);
-            
+
             // Keep only the last 10 messages to avoid cluttering the display
             if messages.len() > 10 {
                 messages.remove(0);
@@ -117,10 +141,9 @@ fn main() -> io::Result<()> {
     };
 
     // Create the Istari app with our custom tick handler
-    let mut app = Istari::new(root_menu, state)
-        .with_tick_handler(tick_handler);
-    
+    let mut app = Istari::new(root_menu, state).with_tick_handler(tick_handler);
+
     app.run()?;
 
     Ok(())
-} 
+}

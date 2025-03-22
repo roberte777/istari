@@ -64,7 +64,7 @@ impl<T> Clone for MenuItem<T> {
         MenuItem {
             key: self.key,
             description: self.description.clone(),
-            action: None,  // We can't clone the action function, so we set it to None
+            action: None, // We can't clone the action function, so we set it to None
             submenu: self.submenu.clone(),
         }
     }
@@ -75,7 +75,14 @@ impl<T: std::fmt::Debug> fmt::Debug for MenuItem<T> {
         f.debug_struct("MenuItem")
             .field("key", &self.key)
             .field("description", &self.description)
-            .field("action", &if self.action.is_some() { "Some(Action)" } else { "None" })
+            .field(
+                "action",
+                &if self.action.is_some() {
+                    "Some(Action)"
+                } else {
+                    "None"
+                },
+            )
             .field("submenu", &self.submenu)
             .finish()
     }
@@ -83,7 +90,7 @@ impl<T: std::fmt::Debug> fmt::Debug for MenuItem<T> {
 
 impl<T> MenuItem<T> {
     /// Create a new menu item with an action
-    pub fn new_action<F>(key: char, description: String, action: F) -> Self 
+    pub fn new_action<F>(key: char, description: String, action: F) -> Self
     where
         F: IntoActionFn<T>,
     {
@@ -144,7 +151,12 @@ impl<T> Menu<T> {
     }
 
     /// Add an action item to this menu
-    pub fn add_action<F>(&mut self, key: char, description: impl Into<String>, action: F) -> &mut Self 
+    pub fn add_action<F>(
+        &mut self,
+        key: char,
+        description: impl Into<String>,
+        action: F,
+    ) -> &mut Self
     where
         F: IntoActionFn<T>,
     {
@@ -152,7 +164,12 @@ impl<T> Menu<T> {
     }
 
     /// Add a submenu to this menu
-    pub fn add_submenu(&mut self, key: char, description: impl Into<String>, mut submenu: Menu<T>) -> &mut Self {
+    pub fn add_submenu(
+        &mut self,
+        key: char,
+        description: impl Into<String>,
+        mut submenu: Menu<T>,
+    ) -> &mut Self {
         // We'll set the parent when navigating to the submenu
         submenu.parent = None;
         self.add_item(MenuItem::new_submenu(key, description.into(), submenu))
@@ -160,8 +177,7 @@ impl<T> Menu<T> {
 
     /// Get the item for a given key
     pub fn get_item(&self, key: char) -> Option<&MenuItem<T>> {
-        self.items.iter()
-            .find(|item| item.key == key)
+        self.items.iter().find(|item| item.key == key)
     }
 }
 
@@ -204,7 +220,7 @@ impl<T: std::fmt::Debug> Istari<T> {
     }
 
     /// Set a custom tick handler
-    pub fn with_tick_handler<F>(mut self, handler: F) -> Self 
+    pub fn with_tick_handler<F>(mut self, handler: F) -> Self
     where
         F: IntoTickFn<T>,
     {
@@ -221,34 +237,34 @@ impl<T: std::fmt::Debug> Istari<T> {
     pub fn output_messages(&self) -> &[String] {
         &self.output_messages
     }
-    
+
     /// Add an output message
     pub fn add_output(&mut self, message: String) {
         self.output_messages.push(message);
         self.new_output = true;
     }
-    
+
     /// Check if there's new output and reset the flag
     pub fn has_new_output(&mut self) -> bool {
         let has_new = self.new_output;
         self.new_output = false;
         has_new
     }
-    
+
     /// Handle a tick update
     /// This is called regularly to update any time-based state
     pub fn tick(&mut self) {
         let now = Instant::now();
         let delta_time = now.duration_since(self.last_tick_time).as_secs_f32();
         self.last_tick_time = now;
-        
+
         // Call custom tick handler if one is set
         if let Some(handler) = &self.tick_handler {
             // Save the current message count to detect new messages
             let prev_msg_count = self.output_messages.len();
-            
+
             handler(&mut self.state, &mut self.output_messages, delta_time);
-            
+
             // If tick handler added messages, set the new_output flag
             if self.output_messages.len() > prev_msg_count {
                 self.new_output = true;
@@ -264,7 +280,7 @@ impl<T: std::fmt::Debug> Istari<T> {
             let mut found_idx = None;
             let mut has_submenu = false;
             let mut has_action = false;
-            
+
             for (idx, item) in menu.items.iter().enumerate() {
                 if item.key == key {
                     has_submenu = item.submenu.is_some();
@@ -273,14 +289,14 @@ impl<T: std::fmt::Debug> Istari<T> {
                     break;
                 }
             }
-            
+
             (has_submenu, has_action, found_idx)
         };
-        
+
         if let Some(idx) = idx {
             // Process the menu item - handle submenu first
             let mut submenu_to_navigate = None;
-            
+
             if has_submenu {
                 // Another lock to get the submenu
                 let submenu = {
@@ -288,10 +304,10 @@ impl<T: std::fmt::Debug> Istari<T> {
                     let item = &menu.items[idx];
                     item.submenu.as_ref().unwrap().clone()
                 };
-                
+
                 submenu_to_navigate = Some((submenu, self.current_menu.clone()));
             }
-            
+
             // Handle submenu navigation
             if let Some((submenu, current_menu)) = submenu_to_navigate {
                 // Make sure the submenu's parent points to the current menu
@@ -301,21 +317,21 @@ impl<T: std::fmt::Debug> Istari<T> {
                 }
                 self.current_menu = submenu;
             }
-            
+
             // Now handle action if it exists
             if has_action {
                 // Execute the action
                 let action_result = self.execute_action_from_idx(idx, params);
-                
+
                 // Handle action result
                 if let Some(output) = action_result {
                     self.add_output(output);
                 }
             }
-            
+
             return true;
         }
-        
+
         // Handle special keys
         if key == 'q' {
             // Only quit from root menu
@@ -323,11 +339,14 @@ impl<T: std::fmt::Debug> Istari<T> {
                 let menu = self.current_menu.lock().unwrap();
                 menu.parent.is_none()
             };
-            
+
             if is_root {
                 return false; // Signal to exit the app
             } else {
-                self.add_output("Use 'b' to return to previous menu, or navigate to root menu to quit".to_string());
+                self.add_output(
+                    "Use 'b' to return to previous menu, or navigate to root menu to quit"
+                        .to_string(),
+                );
             }
         } else if key == 'b' {
             // Back navigation
@@ -335,7 +354,7 @@ impl<T: std::fmt::Debug> Istari<T> {
                 let menu = self.current_menu.lock().unwrap();
                 menu.parent.clone()
             };
-            
+
             if let Some(parent_menu) = parent {
                 self.current_menu = parent_menu;
             } else {
@@ -345,47 +364,47 @@ impl<T: std::fmt::Debug> Istari<T> {
             // Unknown key
             self.add_output(format!("Unknown command: {}", key));
         }
-        
+
         true
     }
-    
+
     /// Execute an action with optional parameters in a way that avoids borrow conflicts
     fn execute_action_from_idx(&mut self, idx: usize, params: Option<String>) -> Option<String> {
         // The core issue is that we can't store references to the menu contents after the lock is dropped.
         // We need to extract what we need and then release the lock.
-        
+
         // We'll use this approach:
         // 1. Get the menu lock
         // 2. Check if idx is valid and there's an action
         // 3. Extract a reference to the action closure
         // 4. Call the action directly while holding the lock, then return the result
-        
+
         let result = {
             let menu = self.current_menu.lock().unwrap();
-            
+
             // Check if the index is valid
             if idx >= menu.items.len() {
                 return None;
             }
-            
+
             // Get the item
             let item = &menu.items[idx];
-            
+
             // If there's no action, return None
             if item.action.is_none() {
                 return None;
             }
-            
+
             // Get the action and call it directly
             let action = item.action.as_ref().unwrap();
             let params_ref = params.as_deref();
             action(&mut self.state, params_ref)
         };
-        
+
         // Return the result
         result
     }
-    
+
     /// Original handle_key method that delegates to handle_key_with_params
     pub fn handle_key(&mut self, key: char) -> bool {
         self.handle_key_with_params(key, None)
@@ -400,7 +419,7 @@ impl<T: std::fmt::Debug> Istari<T> {
     pub fn mode(&self) -> Mode {
         self.current_mode
     }
-    
+
     /// Toggle between modes
     pub fn toggle_mode(&mut self) {
         self.current_mode = match self.current_mode {
@@ -408,7 +427,7 @@ impl<T: std::fmt::Debug> Istari<T> {
             Mode::Scroll => Mode::Command,
         };
     }
-    
+
     /// Set a specific mode
     pub fn set_mode(&mut self, mode: Mode) {
         self.current_mode = mode;
@@ -418,49 +437,49 @@ impl<T: std::fmt::Debug> Istari<T> {
     pub fn input_buffer(&self) -> &str {
         &self.input_buffer
     }
-    
+
     /// Add a character to the input buffer
     pub fn add_to_input_buffer(&mut self, c: char) {
         self.input_buffer.push(c);
     }
-    
+
     /// Clear the input buffer
     pub fn clear_input_buffer(&mut self) {
         self.input_buffer.clear();
     }
-    
+
     /// Remove the last character from the input buffer
     pub fn backspace_input_buffer(&mut self) {
         self.input_buffer.pop();
     }
-    
+
     /// Toggle showing the input box
     pub fn toggle_show_input(&mut self) {
         self.show_input = !self.show_input;
     }
-    
+
     /// Check if input should be shown
     pub fn show_input(&self) -> bool {
         self.show_input
     }
-    
+
     /// Process the current input buffer as a command
     pub fn process_input_buffer(&mut self) -> bool {
         if self.input_buffer.is_empty() {
             return true;
         }
-        
+
         // Create a binding that lives for the entire function
         let input_clone = self.input_buffer.clone();
         let input = input_clone.trim();
-        
+
         // Split input into command and parameters
         let parts: Vec<&str> = input.splitn(2, ' ').collect();
         let command = parts[0].to_lowercase();
         let params = parts.get(1).map(|&s| s.to_string());
-        
+
         let mut result = true;
-        
+
         // Handle special commands
         if command == "quit" || command == "exit" || command == "q" {
             // Quit command - only works from root menu
@@ -468,11 +487,14 @@ impl<T: std::fmt::Debug> Istari<T> {
                 let menu = self.current_menu.lock().unwrap();
                 menu.parent.is_none()
             };
-            
+
             if is_root {
                 result = false; // Signal to exit the app
             } else {
-                self.add_output("Use 'back' to return to previous menu, or navigate to root menu to quit".to_string());
+                self.add_output(
+                    "Use 'back' to return to previous menu, or navigate to root menu to quit"
+                        .to_string(),
+                );
             }
         } else if command == "back" || command == "b" {
             // Back navigation
@@ -480,7 +502,7 @@ impl<T: std::fmt::Debug> Istari<T> {
                 let menu = self.current_menu.lock().unwrap();
                 menu.parent.clone()
             };
-            
+
             if let Some(parent_menu) = parent {
                 self.current_menu = parent_menu;
             } else {
@@ -498,7 +520,7 @@ impl<T: std::fmt::Debug> Istari<T> {
                 let mut found_idx = None;
                 let mut has_submenu = false;
                 let mut has_action = false;
-                
+
                 for (idx, item) in menu.items.iter().enumerate() {
                     if item.description.to_lowercase().contains(&command) {
                         has_submenu = item.submenu.is_some();
@@ -507,14 +529,14 @@ impl<T: std::fmt::Debug> Istari<T> {
                         break;
                     }
                 }
-                
+
                 (has_submenu, has_action, found_idx)
             };
-            
+
             if let Some(idx) = idx {
                 // Process the menu item
                 let mut submenu_to_navigate = None;
-                
+
                 // Handle submenu if present
                 if has_submenu {
                     // Another lock to get the submenu
@@ -523,10 +545,10 @@ impl<T: std::fmt::Debug> Istari<T> {
                         let item = &menu.items[idx];
                         item.submenu.as_ref().unwrap().clone()
                     };
-                    
+
                     submenu_to_navigate = Some((submenu, self.current_menu.clone()));
                 }
-                
+
                 // Handle submenu navigation
                 if let Some((submenu, current_menu)) = submenu_to_navigate {
                     // Make sure the submenu's parent points to the current menu
@@ -536,12 +558,12 @@ impl<T: std::fmt::Debug> Istari<T> {
                     }
                     self.current_menu = submenu;
                 }
-                
+
                 // Now handle action if it exists
                 if has_action {
                     // Execute the action
                     let action_result = self.execute_action_from_idx(idx, params);
-                    
+
                     // Handle action result
                     if let Some(output) = action_result {
                         self.add_output(output);
@@ -552,7 +574,7 @@ impl<T: std::fmt::Debug> Istari<T> {
                 self.add_output(format!("Unknown command: {}", command));
             }
         }
-        
+
         self.clear_input_buffer();
         result
     }
