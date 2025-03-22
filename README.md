@@ -100,8 +100,8 @@ cargo run --example advanced_menu
 # Async operation demo
 cargo run --example async_menu
 
-# Animation and custom rendering
-cargo run --example animated_demo
+# Example of text based rendering
+cargo run --example text_renderer
 ```
 
 ## 📄 License
