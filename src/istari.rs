@@ -256,9 +256,7 @@ impl<T: std::fmt::Debug> Istari<T> {
             let item = &menu.items[idx];
 
             // If there's no action, return None
-            if item.action.is_none() {
-                return None;
-            }
+            item.action.as_ref()?;
 
             // Get the action and call it directly
             let action = item.action.as_ref().unwrap();

@@ -310,10 +310,9 @@ fn event_loop<T: std::fmt::Debug>(
 
                                 // Process input when Enter is pressed
                                 crossterm::event::KeyCode::Enter => {
-                                    if !app.input_buffer().is_empty() {
-                                        if !app.process_input_buffer() {
-                                            return Ok(());
-                                        }
+                                    if !app.input_buffer().is_empty() && !app.process_input_buffer()
+                                    {
+                                        return Ok(());
                                     }
                                 }
 
@@ -331,10 +330,10 @@ fn event_loop<T: std::fmt::Debug>(
                                 _ => {
                                     // Convert keycode to string representation
                                     if let crossterm::event::KeyCode::Char(c) = key.code {
-                                        if app.input_buffer().is_empty() {
-                                            if !app.handle_key(c.to_string()) {
-                                                return Ok(());
-                                            }
+                                        if app.input_buffer().is_empty()
+                                            && !app.handle_key(c.to_string())
+                                        {
+                                            return Ok(());
                                         }
                                     }
                                 }
