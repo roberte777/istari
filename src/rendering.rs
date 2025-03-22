@@ -391,8 +391,7 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
                                             renderer.output_scroll = usize::MAX; // Will be clamped in render
                                         }
                                     }
-                                    _ => {
-                                    }
+                                    _ => {}
                                 }
                             }
                         }
@@ -447,8 +446,7 @@ fn event_loop<T: std::fmt::Debug>(app: &mut Istari<T>, renderer: &mut Renderer) 
                         // Enable auto-scroll when going to bottom
                         renderer.auto_scroll = true;
                     }
-                    _ => {
-                    }
+                    _ => {}
                 }
             }
         } else {

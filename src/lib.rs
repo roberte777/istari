@@ -1,10 +1,10 @@
 pub mod error;
-pub mod types;
-pub mod menu;
 pub mod istari;
+pub mod menu;
 pub mod rendering;
+pub mod types;
 
 pub use error::IstariError;
-pub use types::{Mode, ActionType, IntoActionFn, IntoTickFn, SyncFnMarker, AsyncFnMarker};
-pub use menu::{Menu, MenuItem};
 pub use istari::Istari;
+pub use menu::{Menu, MenuItem};
+pub use types::{ActionType, AsyncFnMarker, IntoActionFn, IntoTickFn, Mode, SyncFnMarker};

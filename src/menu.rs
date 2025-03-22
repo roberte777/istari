@@ -1,7 +1,7 @@
+use crate::error::{IstariError, RESERVED_KEYS};
+use crate::types::{ActionType, IntoActionFn};
 use std::fmt;
 use std::sync::{Arc, Mutex};
-use crate::types::{ActionType, IntoActionFn};
-use crate::error::{IstariError, RESERVED_KEYS};
 
 /// A menu item that can be selected
 pub struct MenuItem<T> {
@@ -139,25 +139,31 @@ impl<T> Menu<T> {
     /// Validate menu structure to ensure no duplicate or reserved keys
     pub fn validate_menu(menu: &Menu<T>) -> Result<(), IstariError> {
         let mut seen_keys = std::collections::HashSet::new();
-        
+
         // Check for duplicate and reserved keys in this menu
         for item in &menu.items {
             // Check if key is reserved
             if RESERVED_KEYS.contains(&item.key.as_str()) {
-                return Err(IstariError::ReservedCommand(item.key.clone(), menu.title.clone()));
+                return Err(IstariError::ReservedCommand(
+                    item.key.clone(),
+                    menu.title.clone(),
+                ));
             }
-            
+
             // Check if key is a duplicate
             if !seen_keys.insert(item.key.clone()) {
-                return Err(IstariError::DuplicateCommand(item.key.clone(), menu.title.clone()));
+                return Err(IstariError::DuplicateCommand(
+                    item.key.clone(),
+                    menu.title.clone(),
+                ));
             }
-            
+
             // Recursively validate submenu if it exists
             if let Some(submenu) = &item.submenu {
                 Self::validate_menu(&submenu.lock().unwrap())?;
             }
         }
-        
+
         Ok(())
     }
 }
@@ -166,9 +172,9 @@ impl<T> Menu<T> {
 mod tests {
     use super::*;
     #[derive(Debug)]
-pub struct TestState {
-    pub counter: i32,
-} 
+    pub struct TestState {
+        pub counter: i32,
+    }
 
     #[test]
     fn test_menu_creation() {
@@ -197,25 +203,25 @@ pub struct TestState {
     #[test]
     fn test_menu_validation_duplicate_keys() {
         let mut menu: Menu<TestState> = Menu::new("Test Menu".to_string());
-        
+
         // Add first action
         menu.add_action(
             "1".to_string(),
             "First Action".to_string(),
             |_state: &mut TestState, _params: Option<&str>| Some("First".to_string()),
         );
-        
+
         // Add duplicate key
         menu.add_action(
             "1".to_string(),
             "Duplicate Action".to_string(),
             |_state: &mut TestState, _params: Option<&str>| Some("Second".to_string()),
         );
-        
+
         // Try to create Istari with invalid menu
         let state = TestState { counter: 0 };
         let result = Menu::validate_menu(&menu);
-        
+
         assert!(result.is_err());
         if let Err(IstariError::DuplicateCommand(key, menu_title)) = result {
             assert_eq!(key, "1");
@@ -228,18 +234,18 @@ pub struct TestState {
     #[test]
     fn test_menu_validation_reserved_keys() {
         let mut menu: Menu<TestState> = Menu::new("Test Menu".to_string());
-        
+
         // Add action with reserved key 'q'
         menu.add_action(
             "q".to_string(),
             "Reserved Key Action".to_string(),
             |_state: &mut TestState, _params: Option<&str>| Some("Reserved".to_string()),
         );
-        
+
         // Try to create Istari with invalid menu
         let state = TestState { counter: 0 };
         let result = Menu::validate_menu(&menu);
-        
+
         assert!(result.is_err());
         if let Err(IstariError::ReservedCommand(key, menu_title)) = result {
             assert_eq!(key, "q");
@@ -253,26 +259,26 @@ pub struct TestState {
     fn test_menu_validation_nested_duplicate_keys() {
         let mut root_menu: Menu<TestState> = Menu::new("Root Menu".to_string());
         let mut submenu: Menu<TestState> = Menu::new("Submenu".to_string());
-        
+
         // Add duplicate keys in submenu
         submenu.add_action(
             "1".to_string(),
             "First Action".to_string(),
             |_state: &mut TestState, _params: Option<&str>| Some("First".to_string()),
         );
-        
+
         submenu.add_action(
             "1".to_string(),
             "Duplicate Action".to_string(),
             |_state: &mut TestState, _params: Option<&str>| Some("Second".to_string()),
         );
-        
+
         root_menu.add_submenu("s".to_string(), "Go to Submenu".to_string(), submenu);
-        
+
         // Try to create Istari with invalid menu
         let state = TestState { counter: 0 };
         let result = Menu::validate_menu(&root_menu);
-        
+
         assert!(result.is_err());
         if let Err(IstariError::DuplicateCommand(key, menu_title)) = result {
             assert_eq!(key, "1");
@@ -286,20 +292,20 @@ pub struct TestState {
     fn test_menu_validation_nested_reserved_keys() {
         let mut root_menu: Menu<TestState> = Menu::new("Root Menu".to_string());
         let mut submenu: Menu<TestState> = Menu::new("Submenu".to_string());
-        
+
         // Add action with reserved key in submenu
         submenu.add_action(
             "q".to_string(),
             "Reserved Key Action".to_string(),
             |_state: &mut TestState, _params: Option<&str>| Some("Reserved".to_string()),
         );
-        
+
         root_menu.add_submenu("s".to_string(), "Go to Submenu".to_string(), submenu);
-        
+
         // Try to create Istari with invalid menu
         let state = TestState { counter: 0 };
         let result = Menu::validate_menu(&root_menu);
-        
+
         assert!(result.is_err());
         if let Err(IstariError::ReservedCommand(key, menu_title)) = result {
             assert_eq!(key, "q");
@@ -313,7 +319,7 @@ pub struct TestState {
     fn test_menu_navigation() {
         let mut root_menu: Menu<TestState> = Menu::new("Root".to_string());
         let mut submenu: Menu<TestState> = Menu::new("Submenu".to_string());
-        
+
         submenu.add_action(
             "1".to_string(),
             "Submenu Action".to_string(),
@@ -322,12 +328,12 @@ pub struct TestState {
                 Some("Submenu action executed".to_string())
             },
         );
-        
+
         root_menu.add_submenu("s".to_string(), "Go to Submenu".to_string(), submenu);
-        
+
         let item = root_menu.get_item("s").unwrap();
         assert!(item.submenu.is_some());
-        
+
         let submenu = item.submenu.as_ref().unwrap().lock().unwrap();
         assert_eq!(submenu.title, "Submenu");
         assert_eq!(submenu.items.len(), 1);
@@ -340,7 +346,7 @@ pub struct TestState {
             "Test Action".to_string(),
             |_state: &mut TestState, _params: Option<&str>| Some("Action".to_string()),
         );
-        
+
         let cloned = item.clone();
         assert_eq!(cloned.key, item.key);
         assert_eq!(cloned.description, item.description);
@@ -356,9 +362,9 @@ pub struct TestState {
             "Test Action".to_string(),
             |_state: &mut TestState, _params: Option<&str>| Some("Action".to_string()),
         );
-        
+
         let debug_string = format!("{:?}", menu);
         assert!(debug_string.contains("Test Menu"));
         assert!(debug_string.contains("Test Action"));
     }
-} 
+}

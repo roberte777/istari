@@ -51,7 +51,8 @@ fn main() -> io::Result<()> {
     root_menu.add_submenu('s', "Settings Menu", settings);
 
     // Create and run our application
-    let mut app = Istari::new(root_menu, state).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let mut app = Istari::new(root_menu, state)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     app.run()
 }
 

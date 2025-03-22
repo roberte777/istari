@@ -1,9 +1,9 @@
+use crate::error::IstariError;
+use crate::menu::Menu;
+use crate::types::{ActionType, IntoTickFn, Mode, TickFn};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio;
-use crate::menu::Menu;
-use crate::types::{Mode, ActionType, IntoTickFn, TickFn};
-use crate::error::IstariError;
 
 /// Main application that handles rendering and events
 pub struct Istari<T> {
@@ -103,9 +103,13 @@ impl<T: std::fmt::Debug> Istari<T> {
     }
 
     /// Process a single character key command, potentially with parameters
-    pub fn handle_key_with_params(&mut self, key: impl Into<String>, params: Option<String>) -> bool {
+    pub fn handle_key_with_params(
+        &mut self,
+        key: impl Into<String>,
+        params: Option<String>,
+    ) -> bool {
         let key_string = key.into();
-        
+
         // First find information about the matching item, keeping lock short
         let (has_submenu, has_action, idx) = {
             let menu = self.current_menu.lock().unwrap();
@@ -423,17 +427,17 @@ mod tests {
     use crate::menu::Menu;
 
     #[derive(Debug)]
-pub struct TestState {
-    pub counter: i32,
-} 
+    pub struct TestState {
+        pub counter: i32,
+    }
     #[test]
     fn test_istari_creation() {
         let state = TestState { counter: 0 };
         let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
-        
+
         let result = Istari::new(menu, state);
         assert!(result.is_ok());
-        
+
         let app = result.unwrap();
         assert_eq!(app.mode(), Mode::Command);
         assert!(app.output_messages().is_empty());
@@ -445,13 +449,13 @@ pub struct TestState {
         let state = TestState { counter: 0 };
         let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
         let mut app = Istari::new(menu, state).unwrap();
-        
+
         assert_eq!(app.mode(), Mode::Command);
         app.toggle_mode();
         assert_eq!(app.mode(), Mode::Scroll);
         app.toggle_mode();
         assert_eq!(app.mode(), Mode::Command);
-        
+
         app.set_mode(Mode::Scroll);
         assert_eq!(app.mode(), Mode::Scroll);
     }
@@ -461,17 +465,17 @@ pub struct TestState {
         let state = TestState { counter: 0 };
         let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
         let mut app = Istari::new(menu, state).unwrap();
-        
+
         assert!(app.input_buffer().is_empty());
         app.add_to_input_buffer('t');
         app.add_to_input_buffer('e');
         app.add_to_input_buffer('s');
         app.add_to_input_buffer('t');
         assert_eq!(app.input_buffer(), "test");
-        
+
         app.backspace_input_buffer();
         assert_eq!(app.input_buffer(), "tes");
-        
+
         app.clear_input_buffer();
         assert!(app.input_buffer().is_empty());
     }
@@ -481,12 +485,12 @@ pub struct TestState {
         let state = TestState { counter: 0 };
         let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
         let mut app = Istari::new(menu, state).unwrap();
-        
+
         assert!(app.output_messages().is_empty());
         app.add_output("Test message".to_string());
         assert_eq!(app.output_messages().len(), 1);
         assert_eq!(app.output_messages()[0], "Test message");
-        
+
         assert!(app.has_new_output());
         assert!(!app.has_new_output());
     }
@@ -495,16 +499,16 @@ pub struct TestState {
     fn test_tick_handler() {
         let state = TestState { counter: 0 };
         let menu: Menu<TestState> = Menu::new("Test Menu".to_string());
-        let mut app = Istari::new(menu, state)
-            .unwrap()
-            .with_tick_handler(|state: &mut TestState, messages: &mut Vec<String>, _delta: f32| {
+        let mut app = Istari::new(menu, state).unwrap().with_tick_handler(
+            |state: &mut TestState, messages: &mut Vec<String>, _delta: f32| {
                 state.counter += 1;
                 messages.push(format!("Tick: {}", state.counter));
-            });
-        
+            },
+        );
+
         // Simulate a tick
         app.tick();
         assert_eq!(app.output_messages().len(), 1);
         assert_eq!(app.output_messages()[0], "Tick: 1");
     }
-} 
+}

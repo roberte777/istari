@@ -1,5 +1,5 @@
-use std::future::Future;
 use futures::future::BoxFuture;
+use std::future::Future;
 
 /// Defines the possible application modes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,7 +18,8 @@ pub struct AsyncFnMarker;
 pub type ActionFn<T> = Box<dyn Fn(&mut T, Option<&str>) -> Option<String> + Send + Sync>;
 
 /// Type for asynchronous action functions that can be executed when menu items are selected
-pub type AsyncActionFn<T> = Box<dyn Fn(&mut T, Option<&str>) -> BoxFuture<'static, Option<String>> + Send + Sync>;
+pub type AsyncActionFn<T> =
+    Box<dyn Fn(&mut T, Option<&str>) -> BoxFuture<'static, Option<String>> + Send + Sync>;
 
 /// Represents either a synchronous or asynchronous action function
 pub enum ActionType<T> {
@@ -74,4 +75,4 @@ where
     fn into_tick_fn(self) -> TickFn<T> {
         Box::new(self)
     }
-} 
+}

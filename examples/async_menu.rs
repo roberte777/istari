@@ -58,18 +58,18 @@ fn main() -> io::Result<()> {
         |state: &mut AppState, params: Option<&str>| {
             let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
             let delay_ms = 1000; // 1 second delay to simulate async work
-            
+
             // Mutate state here before the async block
             state.async_counter += amount;
             state.last_operation = format!("Async increment by {} after {}ms", amount, delay_ms);
-            
+
             // Capture values by value, not by reference
             let new_counter = state.async_counter;
-            
+
             Box::pin(async move {
                 // Simulate some async work
                 tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                
+
                 Some(format!(
                     "Async counter incremented by {} to {} (after {}ms delay)",
                     amount, new_counter, delay_ms
@@ -84,18 +84,18 @@ fn main() -> io::Result<()> {
         |state: &mut AppState, params: Option<&str>| {
             let amount = params.and_then(|p| p.parse::<i32>().ok()).unwrap_or(1);
             let delay_ms = 500; // 0.5 second delay
-            
+
             // Mutate state here before the async block
             state.async_counter -= amount;
             state.last_operation = format!("Async decrement by {} after {}ms", amount, delay_ms);
-            
+
             // Capture values by value, not by reference
             let new_counter = state.async_counter;
-            
+
             Box::pin(async move {
                 // Simulate some async work
                 tokio::time::sleep(Duration::from_millis(delay_ms)).await;
-                
+
                 Some(format!(
                     "Async counter decremented by {} to {} (after {}ms delay)",
                     amount, new_counter, delay_ms
@@ -117,6 +117,7 @@ fn main() -> io::Result<()> {
     );
 
     // Create and run the application
-    let mut app = Istari::new(root_menu, state).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+    let mut app = Istari::new(root_menu, state)
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
     app.run()
-} 
+}
