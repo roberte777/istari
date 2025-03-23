@@ -1,4 +1,4 @@
-use crate::rendering::{Renderer, ScrollDirection, ScrollState};
+use crate::rendering::{ScrollDirection, ScrollState, UIController};
 use crate::{Istari, Mode};
 use ratatui::{
     Terminal,
@@ -11,14 +11,14 @@ use ratatui::{
 use std::io;
 use std::time::{Duration, Instant};
 
-pub struct TuiRenderer {
+pub struct TuiController {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     scroll_state: ScrollState,
     last_content_height: usize, // Track the last content height to detect changes
 }
 
-impl TuiRenderer {
-    /// Create a new TUI renderer
+impl TuiController {
+    /// Create a new TUI controller
     pub fn new() -> io::Result<Self> {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
@@ -30,7 +30,7 @@ impl TuiRenderer {
     }
 }
 
-impl Renderer for TuiRenderer {
+impl UIController for TuiController {
     /// Initialize the terminal
     fn init(&mut self) -> io::Result<()> {
         crossterm::terminal::enable_raw_mode()?;
@@ -455,12 +455,12 @@ impl Renderer for TuiRenderer {
 
 /// Run the application in TUI mode
 pub fn run<T: std::fmt::Debug>(app: &mut crate::Istari<T>) -> io::Result<()> {
-    let mut renderer = TuiRenderer::new()?;
-    renderer.init()?;
+    let mut controller = TuiController::new()?;
+    controller.init()?;
 
-    let result = renderer.run_event_loop(app);
+    let result = controller.run_event_loop(app);
 
-    renderer.cleanup()?;
+    controller.cleanup()?;
 
     result
 }

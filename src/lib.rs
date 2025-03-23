@@ -6,7 +6,7 @@ pub mod rendering;
 pub mod types;
 
 pub use error::IstariError;
-pub use istari::{CommandHistory, Istari, OutputBuffer, RenderMode};
+pub use istari::{CommandHistory, Istari, OutputBuffer, UIMode};
 pub use menu::{Menu, MenuItem};
 pub use menu_manager::MenuManager;
 pub use types::{ActionType, AsyncFnMarker, IntoActionFn, IntoTickFn, Mode, SyncFnMarker};

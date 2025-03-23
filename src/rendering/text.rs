@@ -1,5 +1,5 @@
 use crate::Istari;
-use crate::rendering::Renderer;
+use crate::rendering::UIController;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     terminal::{disable_raw_mode, enable_raw_mode},
@@ -7,11 +7,11 @@ use crossterm::{
 use std::io::{self, Write, stdout};
 use std::time::{Duration, Instant};
 
-/// Simple text renderer for Istari application
-pub struct TextRenderer {}
+/// Simple text UI controller for Istari application
+pub struct TextController {}
 
-impl TextRenderer {
-    /// Create a new text renderer
+impl TextController {
+    /// Create a new text UI controller
     pub fn new() -> io::Result<Self> {
         Ok(Self {})
     }
@@ -57,7 +57,7 @@ impl TextRenderer {
     }
 }
 
-impl Renderer for TextRenderer {
+impl UIController for TextController {
     fn init(&mut self) -> io::Result<()> {
         // Print welcome message
         println!("Welcome to Istari (Text Mode)");
@@ -218,12 +218,12 @@ impl Renderer for TextRenderer {
 
 /// Run the application in Text mode
 pub fn run<T: std::fmt::Debug>(app: &mut crate::Istari<T>) -> io::Result<()> {
-    let mut renderer = TextRenderer::new()?;
-    renderer.init()?;
+    let mut controller = TextController::new()?;
+    controller.init()?;
 
-    let result = renderer.run_event_loop(app);
+    let result = controller.run_event_loop(app);
 
-    renderer.cleanup()?;
+    controller.cleanup()?;
 
     result
 }

@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio;
 
-/// Defines the rendering method used by the application
+/// Defines the user interface mode used by the application
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RenderMode {
+pub enum UIMode {
     /// Full terminal UI with ratatui
     TUI,
     /// Simple text-based interface
@@ -167,8 +167,8 @@ pub struct Istari<T> {
     show_input: bool,
     /// Tokio runtime for executing async actions
     runtime: tokio::runtime::Runtime,
-    /// Rendering mode (TUI or Text)
-    render_mode: RenderMode,
+    /// User interface mode (TUI or Text)
+    ui_mode: UIMode,
 }
 
 impl<T: std::fmt::Debug> Istari<T> {
@@ -185,7 +185,7 @@ impl<T: std::fmt::Debug> Istari<T> {
             command_history: CommandHistory::new(100),
             show_input: false,
             runtime: tokio::runtime::Runtime::new().unwrap(),
-            render_mode: RenderMode::TUI, // Default to TUI mode
+            ui_mode: UIMode::TUI, // Default to TUI mode
         })
     }
 
@@ -198,9 +198,9 @@ impl<T: std::fmt::Debug> Istari<T> {
         self
     }
 
-    /// Set the rendering mode
-    pub fn with_render_mode(mut self, mode: RenderMode) -> Self {
-        self.render_mode = mode;
+    /// Set the user interface mode
+    pub fn with_ui_mode(mut self, mode: UIMode) -> Self {
+        self.ui_mode = mode;
         self
     }
 
@@ -210,9 +210,9 @@ impl<T: std::fmt::Debug> Istari<T> {
         self
     }
 
-    /// Get the current rendering mode
-    pub fn render_mode(&self) -> RenderMode {
-        self.render_mode
+    /// Get the current UI mode
+    pub fn ui_mode(&self) -> UIMode {
+        self.ui_mode
     }
 
     /// Get a reference to the current menu

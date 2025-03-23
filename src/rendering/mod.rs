@@ -4,17 +4,17 @@ mod tui;
 use crate::Istari;
 use std::io;
 
-/// Dispatch to the right renderer based on the application's render mode
+/// Dispatch to the right UI controller based on the application's UI mode
 pub fn run<T: std::fmt::Debug>(app: &mut Istari<T>) -> io::Result<()> {
-    match app.render_mode() {
-        crate::RenderMode::TUI => tui::run(app),
-        crate::RenderMode::Text => text::run(app),
+    match app.ui_mode() {
+        crate::UIMode::TUI => tui::run(app),
+        crate::UIMode::Text => text::run(app),
     }
 }
 
-/// Common trait that all renderers must implement
-pub trait Renderer {
-    /// Initialize the renderer
+/// Common trait that all UI controllers must implement
+pub trait UIController {
+    /// Initialize the UI environment
     fn init(&mut self) -> io::Result<()>;
 
     /// Clean up and restore terminal state

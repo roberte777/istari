@@ -1,4 +1,4 @@
-use istari::{Istari, Menu, RenderMode};
+use istari::{Istari, Menu, UIMode};
 use std::error::Error;
 
 /// This example demonstrates the simple text-based rendering mode.
@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Create the application with TEXT renderer mode
     // Note: The default mode is RenderMode::TUI if not specified
-    let mut app = Istari::new(root_menu, state)?.with_render_mode(RenderMode::Text);
+    let mut app = Istari::new(root_menu, state)?.with_ui_mode(UIMode::Text);
 
     // Run the application
     app.run()?;
