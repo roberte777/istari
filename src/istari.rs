@@ -80,9 +80,7 @@ impl CommandHistory {
 
     /// Navigate down in history (to newer commands)
     pub fn down(&mut self) -> Option<&String> {
-        if self.position.is_none() {
-            return None;
-        }
+        self.position?;
 
         let pos = self.position.unwrap();
         if pos < self.entries.len() - 1 {
@@ -103,7 +101,7 @@ impl CommandHistory {
 }
 
 /// Manages output messages with notification capabilities
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct OutputBuffer {
     /// Output messages
     messages: Vec<String>,

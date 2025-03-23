@@ -38,6 +38,7 @@ pub enum ScrollDirection {
 }
 
 /// State for scroll position in output window
+#[derive(Debug, Clone, Copy, Default)]
 pub struct ScrollState {
     /// Current scroll position (0 = top)
     pub position: usize,

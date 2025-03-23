@@ -1,4 +1,3 @@
-use futures::future::BoxFuture;
 use istari::{Istari, Menu};
 use std::io;
 use std::time::Duration;

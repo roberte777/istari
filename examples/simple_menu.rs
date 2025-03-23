@@ -1,4 +1,4 @@
-use istari::{Istari, Menu, Mode};
+use istari::{Istari, Menu};
 use std::io;
 
 /// This example demonstrates a simple counter application with multiple menus

@@ -116,99 +116,97 @@ impl UIController for TextController {
 
                 // Poll for events with a timeout
                 if event::poll(Duration::from_millis(100))? {
-                    match event::read()? {
-                        Event::Key(KeyEvent {
-                            code, modifiers, ..
-                        }) => {
-                            match code {
-                                // Exit application with Ctrl+Q
-                                KeyCode::Char('q') if modifiers.contains(KeyModifiers::CONTROL) => {
-                                    disable_raw_mode()?;
-                                    println!("\nExiting...");
+                    if let Event::Key(KeyEvent {
+                        code, modifiers, ..
+                    }) = event::read()?
+                    {
+                        match code {
+                            // Exit application with Ctrl+Q
+                            KeyCode::Char('q') if modifiers.contains(KeyModifiers::CONTROL) => {
+                                disable_raw_mode()?;
+                                println!("\nExiting...");
+                                return Ok(());
+                            }
+
+                            // Enter key - process command
+                            KeyCode::Enter => {
+                                // Update input buffer from our local input
+                                app.clear_input_buffer();
+                                for c in input.chars() {
+                                    app.add_to_input_buffer(c);
+                                }
+
+                                // Process the input
+                                disable_raw_mode()?;
+                                println!(); // New line after input
+                                let should_continue = app.process_input_buffer();
+                                if !should_continue {
+                                    println!("Exiting...");
                                     return Ok(());
                                 }
-
-                                // Enter key - process command
-                                KeyCode::Enter => {
-                                    // Update input buffer from our local input
-                                    app.clear_input_buffer();
-                                    for c in input.chars() {
-                                        app.add_to_input_buffer(c);
-                                    }
-
-                                    // Process the input
-                                    disable_raw_mode()?;
-                                    println!(); // New line after input
-                                    let should_continue = app.process_input_buffer();
-                                    if !should_continue {
-                                        println!("Exiting...");
-                                        return Ok(());
-                                    }
-                                    break;
-                                }
-
-                                // Backspace - delete last character
-                                KeyCode::Backspace => {
-                                    if cursor_pos > 0 {
-                                        input.remove(cursor_pos - 1);
-                                        cursor_pos -= 1;
-
-                                        // Redraw the input line
-                                        disable_raw_mode()?;
-                                        print!("\r> {}", input);
-                                        print!("{}", " ".repeat(10)); // Clear any trailing characters
-                                        print!("\r> {}", input);
-                                        stdout().flush()?;
-                                        enable_raw_mode()?;
-                                    }
-                                }
-
-                                // Up arrow - previous command in history
-                                KeyCode::Up => {
-                                    app.history_up();
-                                    input = app.input_buffer().to_string();
-                                    cursor_pos = input.len();
-
-                                    // Redraw the input line
-                                    disable_raw_mode()?;
-                                    print!("\r> {}", input);
-                                    print!("{}", " ".repeat(10)); // Clear any trailing characters
-                                    print!("\r> {}", input);
-                                    stdout().flush()?;
-                                    enable_raw_mode()?;
-                                }
-
-                                // Down arrow - next command in history
-                                KeyCode::Down => {
-                                    app.history_down();
-                                    input = app.input_buffer().to_string();
-                                    cursor_pos = input.len();
-
-                                    // Redraw the input line
-                                    disable_raw_mode()?;
-                                    print!("\r> {}", input);
-                                    print!("{}", " ".repeat(10)); // Clear any trailing characters
-                                    print!("\r> {}", input);
-                                    stdout().flush()?;
-                                    enable_raw_mode()?;
-                                }
-
-                                // Normal character input
-                                KeyCode::Char(c) => {
-                                    input.insert(cursor_pos, c);
-                                    cursor_pos += 1;
-
-                                    // Redraw the input line
-                                    disable_raw_mode()?;
-                                    print!("\r> {}", input);
-                                    stdout().flush()?;
-                                    enable_raw_mode()?;
-                                }
-
-                                _ => {}
+                                break;
                             }
+
+                            // Backspace - delete last character
+                            KeyCode::Backspace => {
+                                if cursor_pos > 0 {
+                                    input.remove(cursor_pos - 1);
+                                    cursor_pos -= 1;
+
+                                    // Redraw the input line
+                                    disable_raw_mode()?;
+                                    print!("\r> {}", input);
+                                    print!("{}", " ".repeat(10)); // Clear any trailing characters
+                                    print!("\r> {}", input);
+                                    stdout().flush()?;
+                                    enable_raw_mode()?;
+                                }
+                            }
+
+                            // Up arrow - previous command in history
+                            KeyCode::Up => {
+                                app.history_up();
+                                input = app.input_buffer().to_string();
+                                cursor_pos = input.len();
+
+                                // Redraw the input line
+                                disable_raw_mode()?;
+                                print!("\r> {}", input);
+                                print!("{}", " ".repeat(10)); // Clear any trailing characters
+                                print!("\r> {}", input);
+                                stdout().flush()?;
+                                enable_raw_mode()?;
+                            }
+
+                            // Down arrow - next command in history
+                            KeyCode::Down => {
+                                app.history_down();
+                                input = app.input_buffer().to_string();
+                                cursor_pos = input.len();
+
+                                // Redraw the input line
+                                disable_raw_mode()?;
+                                print!("\r> {}", input);
+                                print!("{}", " ".repeat(10)); // Clear any trailing characters
+                                print!("\r> {}", input);
+                                stdout().flush()?;
+                                enable_raw_mode()?;
+                            }
+
+                            // Normal character input
+                            KeyCode::Char(c) => {
+                                input.insert(cursor_pos, c);
+                                cursor_pos += 1;
+
+                                // Redraw the input line
+                                disable_raw_mode()?;
+                                print!("\r> {}", input);
+                                stdout().flush()?;
+                                enable_raw_mode()?;
+                            }
+
+                            _ => {}
                         }
-                        _ => {}
                     }
                 }
             }

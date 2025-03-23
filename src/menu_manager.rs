@@ -164,14 +164,13 @@ mod tests {
 
     #[test]
     fn test_menu_navigation() {
-        let mut state = TestState { counter: 0 };
-
-        // Create a root menu with a submenu
-        let submenu = Menu::new("Submenu".to_string());
-        let submenu_arc = Arc::new(Mutex::new(submenu));
-
-        let mut root_menu = Menu::new("Root".to_string());
-        root_menu.add_item(MenuItem::new("s", "Submenu", None, Some(submenu_arc)));
+        // Create a submenu
+        let mut root_menu: Menu<TestState> = Menu::new("Root".to_string());
+        root_menu.add_item(MenuItem::new_submenu(
+            "s",
+            "Submenu".to_string(),
+            Menu::<TestState>::new("Submenu".to_string()),
+        ));
 
         // Create the menu manager
         let mut manager = MenuManager::new(root_menu).unwrap();
@@ -200,13 +199,13 @@ mod tests {
 
         // Create a menu with an action
         let mut menu = Menu::new("Test".to_string());
-        menu.add_item(MenuItem::new_with_action(
+        menu.add_item(MenuItem::new_action(
             "a",
-            "Increment",
-            Box::new(|state: &mut TestState, _: Option<&str>| {
+            "Increment".to_string(),
+            |state: &mut TestState, _: Option<&str>| {
                 state.counter += 1;
                 Some(format!("Counter: {}", state.counter))
-            }),
+            },
         ));
 
         // Create the menu manager

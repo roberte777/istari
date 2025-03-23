@@ -219,7 +219,6 @@ mod tests {
         );
 
         // Try to create Istari with invalid menu
-        let state = TestState { counter: 0 };
         let result = Menu::validate_menu(&menu);
 
         assert!(result.is_err());
@@ -243,7 +242,6 @@ mod tests {
         );
 
         // Try to create Istari with invalid menu
-        let state = TestState { counter: 0 };
         let result = Menu::validate_menu(&menu);
 
         assert!(result.is_err());
@@ -276,7 +274,6 @@ mod tests {
         root_menu.add_submenu("s".to_string(), "Go to Submenu".to_string(), submenu);
 
         // Try to create Istari with invalid menu
-        let state = TestState { counter: 0 };
         let result = Menu::validate_menu(&root_menu);
 
         assert!(result.is_err());
@@ -303,7 +300,6 @@ mod tests {
         root_menu.add_submenu("s".to_string(), "Go to Submenu".to_string(), submenu);
 
         // Try to create Istari with invalid menu
-        let state = TestState { counter: 0 };
         let result = Menu::validate_menu(&root_menu);
 
         assert!(result.is_err());
