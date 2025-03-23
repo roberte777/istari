@@ -1,6 +1,7 @@
 use crate::error::IstariError;
 use crate::menu::Menu;
-use crate::types::{ActionType, IntoTickFn, Mode, TickFn};
+use crate::menu_manager::MenuManager;
+use crate::types::{IntoTickFn, Mode, TickFn};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio;
@@ -14,16 +15,144 @@ pub enum RenderMode {
     Text,
 }
 
-/// Main application that handles rendering and events
-pub struct Istari<T> {
-    /// The current menu being displayed
-    current_menu: Arc<Mutex<Menu<T>>>,
-    /// Application state shared with menu actions
-    state: T,
-    /// Output messages from actions
-    output_messages: Vec<String>,
+/// Manages command history with navigation capabilities
+#[derive(Debug, Clone)]
+pub struct CommandHistory {
+    /// Command history
+    entries: Vec<String>,
+    /// Current position in command history (None means not browsing history)
+    position: Option<usize>,
+    /// Maximum number of commands to keep in history
+    max_size: usize,
+}
+
+impl CommandHistory {
+    /// Create a new command history
+    pub fn new(max_size: usize) -> Self {
+        Self {
+            entries: Vec::new(),
+            position: None,
+            max_size,
+        }
+    }
+
+    /// Add a command to history
+    pub fn add(&mut self, command: String) {
+        if command.is_empty() {
+            return;
+        }
+
+        // Don't add duplicate of the last command
+        if !self.entries.is_empty() && self.entries.last().unwrap() == &command {
+            return;
+        }
+
+        self.entries.push(command);
+
+        // Trim history if it exceeds the maximum size
+        if self.entries.len() > self.max_size {
+            self.entries.remove(0);
+        }
+
+        // Reset navigation position
+        self.position = None;
+    }
+
+    /// Navigate up in history (to older commands)
+    pub fn up(&mut self) -> Option<&String> {
+        if self.entries.is_empty() {
+            return None;
+        }
+
+        // If not browsing, start from the end
+        if self.position.is_none() {
+            self.position = Some(self.entries.len() - 1);
+        } else if let Some(pos) = self.position {
+            // Move up if possible
+            if pos > 0 {
+                self.position = Some(pos - 1);
+            }
+        }
+
+        // Return the current entry
+        self.position.and_then(|pos| self.entries.get(pos))
+    }
+
+    /// Navigate down in history (to newer commands)
+    pub fn down(&mut self) -> Option<&String> {
+        if self.position.is_none() {
+            return None;
+        }
+
+        let pos = self.position.unwrap();
+        if pos < self.entries.len() - 1 {
+            // Move to newer command
+            self.position = Some(pos + 1);
+            self.position.and_then(|pos| self.entries.get(pos))
+        } else {
+            // At the end of history, exit browsing mode
+            self.position = None;
+            None
+        }
+    }
+
+    /// Exit history browsing mode
+    pub fn exit_browsing(&mut self) {
+        self.position = None;
+    }
+}
+
+/// Manages output messages with notification capabilities
+#[derive(Debug, Clone)]
+pub struct OutputBuffer {
+    /// Output messages
+    messages: Vec<String>,
     /// Flag indicating if new messages were added
     new_output: bool,
+}
+
+impl OutputBuffer {
+    /// Create a new output buffer
+    pub fn new() -> Self {
+        Self {
+            messages: Vec::new(),
+            new_output: false,
+        }
+    }
+
+    /// Add an output message
+    pub fn add(&mut self, message: String) {
+        self.messages.push(message);
+        self.new_output = true;
+    }
+
+    /// Get all messages
+    pub fn messages(&self) -> &[String] {
+        &self.messages
+    }
+
+    /// Check if there's new output and reset the flag
+    pub fn has_new_output(&mut self) -> bool {
+        let has_new = self.new_output;
+        self.new_output = false;
+        has_new
+    }
+
+    /// Clear all messages
+    pub fn clear(&mut self) {
+        self.messages.clear();
+        self.new_output = false;
+    }
+}
+
+/// Main application that handles rendering and events
+pub struct Istari<T> {
+    /// Menu navigation and management
+    menu_manager: MenuManager<T>,
+    /// Application state shared with menu actions
+    state: T,
+    /// Output management
+    output: OutputBuffer,
     /// Last tick update time, for animations or time-based updates
     last_tick_time: Instant,
     /// Optional tick function that's called on each frame update
@@ -32,41 +161,31 @@ pub struct Istari<T> {
     current_mode: Mode,
     /// Command input buffer
     input_buffer: String,
+    /// Command history management
+    command_history: CommandHistory,
     /// Whether the command input should be displayed
     show_input: bool,
     /// Tokio runtime for executing async actions
     runtime: tokio::runtime::Runtime,
     /// Rendering mode (TUI or Text)
     render_mode: RenderMode,
-    /// Command history
-    pub(crate) command_history: Vec<String>,
-    /// Current position in command history (None means not browsing history)
-    history_position: Option<usize>,
-    /// Maximum number of commands to keep in history
-    max_history_size: usize,
 }
 
 impl<T: std::fmt::Debug> Istari<T> {
     /// Create a new Istari application with the given root menu and state
     pub fn new(root_menu: Menu<T>, state: T) -> Result<Self, IstariError> {
-        // Validate the menu structure
-        Menu::validate_menu(&root_menu)?;
-
         Ok(Self {
-            current_menu: Arc::new(Mutex::new(root_menu)),
+            menu_manager: MenuManager::new(root_menu)?,
             state,
-            output_messages: Vec::new(),
-            new_output: false,
+            output: OutputBuffer::new(),
             last_tick_time: Instant::now(),
             tick_handler: None,
             current_mode: Mode::Command, // Default to command mode
             input_buffer: String::new(),
+            command_history: CommandHistory::new(100),
             show_input: false,
             runtime: tokio::runtime::Runtime::new().unwrap(),
             render_mode: RenderMode::TUI, // Default to TUI mode
-            command_history: Vec::new(),
-            history_position: None,
-            max_history_size: 100,
         })
     }
 
@@ -87,7 +206,7 @@ impl<T: std::fmt::Debug> Istari<T> {
 
     /// Set the maximum number of commands to keep in history
     pub fn with_max_history_size(mut self, size: usize) -> Self {
-        self.max_history_size = size;
+        self.command_history = CommandHistory::new(size);
         self
     }
 
@@ -98,31 +217,27 @@ impl<T: std::fmt::Debug> Istari<T> {
 
     /// Get a reference to the current menu
     pub fn current_menu(&self) -> Arc<Mutex<Menu<T>>> {
-        self.current_menu.clone()
+        self.menu_manager.current_menu()
     }
 
     /// Get a reference to the output messages
     pub fn output_messages(&self) -> &[String] {
-        &self.output_messages
+        self.output.messages()
     }
 
     /// Add an output message
     pub fn add_output(&mut self, message: String) {
-        self.output_messages.push(message);
-        self.new_output = true;
+        self.output.add(message);
     }
 
     /// Check if there's new output and reset the flag
     pub fn has_new_output(&mut self) -> bool {
-        let has_new = self.new_output;
-        self.new_output = false;
-        has_new
+        self.output.has_new_output()
     }
 
     /// Clear all output messages
     pub fn clear_output_messages(&mut self) {
-        self.output_messages.clear();
-        self.new_output = false;
+        self.output.clear();
     }
 
     /// Handle a tick update
@@ -135,13 +250,16 @@ impl<T: std::fmt::Debug> Istari<T> {
         // Call custom tick handler if one is set
         if let Some(handler) = &self.tick_handler {
             // Save the current message count to detect new messages
-            let prev_msg_count = self.output_messages.len();
+            let prev_msg_count = self.output.messages().len();
+            let mut output_messages = self.output.messages.clone();
 
-            handler(&mut self.state, &mut self.output_messages, delta_time);
+            handler(&mut self.state, &mut output_messages, delta_time);
 
-            // If tick handler added messages, set the new_output flag
-            if self.output_messages.len() > prev_msg_count {
-                self.new_output = true;
+            // Check if tick handler added messages
+            if output_messages.len() > prev_msg_count {
+                // Update with new messages
+                self.output.messages = output_messages;
+                self.output.new_output = true;
             }
         }
     }
@@ -154,143 +272,49 @@ impl<T: std::fmt::Debug> Istari<T> {
     ) -> bool {
         let key_string = key.into();
 
-        // First find information about the matching item, keeping lock short
-        let (has_submenu, has_action, idx) = {
-            let menu = self.current_menu.lock().unwrap();
-            let mut found_idx = None;
-            let mut has_submenu = false;
-            let mut has_action = false;
-
-            for (idx, item) in menu.items.iter().enumerate() {
-                if item.key == key_string {
-                    has_submenu = item.submenu.is_some();
-                    has_action = item.action.is_some();
-                    found_idx = Some(idx);
-                    break;
-                }
-            }
-
-            (has_submenu, has_action, found_idx)
-        };
-
-        if let Some(idx) = idx {
-            // Process the menu item - handle submenu first
-            let mut submenu_to_navigate = None;
-
-            if has_submenu {
-                // Another lock to get the submenu
-                let submenu = {
-                    let menu = self.current_menu.lock().unwrap();
-                    let item = &menu.items[idx];
-                    item.submenu.as_ref().unwrap().clone()
-                };
-
-                submenu_to_navigate = Some((submenu, self.current_menu.clone()));
-            }
-
-            // Handle submenu navigation
-            if let Some((submenu, current_menu)) = submenu_to_navigate {
-                // Make sure the submenu's parent points to the current menu
-                {
-                    let mut submenu_guard = submenu.lock().unwrap();
-                    submenu_guard.parent = Some(current_menu);
-                }
-                self.current_menu = submenu;
-            }
-
-            // Now handle action if it exists
-            if has_action {
-                // Execute the action
-                let action_result = self.execute_action_from_idx(idx, params);
-
-                // Handle action result
-                if let Some(output) = action_result {
-                    self.add_output(output);
-                }
-            }
-
-            return true;
-        }
-
-        // Handle special keys
+        // Check for special keys first
         if key_string == "q" {
             // Only quit from root menu
-            let is_root = {
-                let menu = self.current_menu.lock().unwrap();
-                menu.parent.is_none()
-            };
-
-            if is_root {
+            if self.menu_manager.is_at_root() {
                 return false; // Signal to exit the app
             } else {
                 self.add_output(
                     "Use 'b' to return to previous menu, or navigate to root menu to quit"
                         .to_string(),
                 );
+                return true;
             }
         } else if key_string == "b" {
             // Back navigation
-            let parent = {
-                let menu = self.current_menu.lock().unwrap();
-                menu.parent.clone()
-            };
-
-            if let Some(parent_menu) = parent {
-                self.current_menu = parent_menu;
-            } else {
+            if !self.menu_manager.navigate_back() {
                 self.add_output("Already at root menu".to_string());
             }
-        } else {
-            // Unknown key
-            self.add_output(format!("Unknown command: {}", key_string));
+            return true;
         }
 
-        true
-    }
+        // Check if the key corresponds to a menu item with a submenu
+        if self.menu_manager.has_submenu(&key_string) {
+            self.menu_manager.navigate_to_submenu(&key_string);
+            return true;
+        }
 
-    /// Execute an action with optional parameters in a way that avoids borrow conflicts
-    fn execute_action_from_idx(&mut self, idx: usize, params: Option<String>) -> Option<String> {
-        // The core issue is that we can't store references to the menu contents after the lock is dropped.
-        // We need to extract what we need and then release the lock.
-
-        // We'll use this approach:
-        // 1. Get the menu lock
-        // 2. Check if idx is valid and there's an action
-        // 3. Extract a reference to the action closure
-        // 4. Call the action directly while holding the lock, then return the result
-
-        let result = {
-            let menu = self.current_menu.lock().unwrap();
-
-            // Check if the index is valid
-            if idx >= menu.items.len() {
-                return None;
-            }
-
-            // Get the item
-            let item = &menu.items[idx];
-
-            // If there's no action, return None
-            item.action.as_ref()?;
-
-            // Get the action and call it directly
-            let action = item.action.as_ref().unwrap();
+        // Check if the key corresponds to a menu item with an action
+        if self.menu_manager.has_action(&key_string) {
             let params_ref = params.as_deref();
-
-            match action {
-                ActionType::Sync(sync_fn) => sync_fn(&mut self.state, params_ref),
-                ActionType::Async(async_fn) => {
-                    // Use the shared runtime instead of creating a new one
-                    self.runtime.block_on(async {
-                        let future = async_fn(&mut self.state, params_ref);
-                        future.await
-                    })
-                }
+            if let Some(result) = self.menu_manager.execute_action(
+                &key_string,
+                &mut self.state,
+                params_ref,
+                &self.runtime,
+            ) {
+                self.add_output(result);
             }
-        };
+            return true;
+        }
 
-        // Return the result
-        result
+        // If we get here, the key wasn't recognized
+        self.add_output(format!("Unknown command: {}", key_string));
+        true
     }
 
     /// Original handle_key method that delegates to handle_key_with_params
@@ -361,117 +385,18 @@ impl<T: std::fmt::Debug> Istari<T> {
         let input_clone = self.input_buffer.clone();
         let input = input_clone.trim();
 
-        // Add command to history only if it's not empty and different from the last entry
+        // Add command to history
         if !input.is_empty() {
-            if self.command_history.is_empty() || self.command_history.last().unwrap() != input {
-                self.command_history.push(input.to_string());
-
-                // Trim history if it exceeds the maximum size
-                if self.command_history.len() > self.max_history_size {
-                    self.command_history.remove(0);
-                }
-            }
+            self.command_history.add(input.to_string());
         }
-
-        // Reset history position
-        self.history_position = None;
 
         // Split input into command and parameters
         let parts: Vec<&str> = input.splitn(2, ' ').collect();
         let command = parts[0].to_lowercase();
         let params = parts.get(1).map(|&s| s.to_string());
 
-        let mut result = true;
-
-        // Handle special commands
-        if command == "quit" || command == "exit" || command == "q" {
-            // Quit command - only works from root menu
-            let is_root = {
-                let menu = self.current_menu.lock().unwrap();
-                menu.parent.is_none()
-            };
-
-            if is_root {
-                result = false; // Signal to exit the app
-            } else {
-                self.add_output(
-                    "Use 'back' to return to previous menu, or navigate to root menu to quit"
-                        .to_string(),
-                );
-            }
-        } else if command == "back" || command == "b" {
-            // Back navigation
-            let parent = {
-                let menu = self.current_menu.lock().unwrap();
-                menu.parent.clone()
-            };
-
-            if let Some(parent_menu) = parent {
-                self.current_menu = parent_menu;
-            } else {
-                self.add_output("Already at root menu".to_string());
-            }
-        } else {
-            // Try to match on the command key
-            let (has_submenu, has_action, idx) = {
-                let menu = self.current_menu.lock().unwrap();
-                let mut found_idx = None;
-                let mut has_submenu = false;
-                let mut has_action = false;
-
-                for (idx, item) in menu.items.iter().enumerate() {
-                    if item.key.to_lowercase() == command {
-                        has_submenu = item.submenu.is_some();
-                        has_action = item.action.is_some();
-                        found_idx = Some(idx);
-                        break;
-                    }
-                }
-
-                (has_submenu, has_action, found_idx)
-            };
-
-            if let Some(idx) = idx {
-                // Process the menu item
-                let mut submenu_to_navigate = None;
-
-                // Handle submenu if present
-                if has_submenu {
-                    // Another lock to get the submenu
-                    let submenu = {
-                        let menu = self.current_menu.lock().unwrap();
-                        let item = &menu.items[idx];
-                        item.submenu.as_ref().unwrap().clone()
-                    };
-
-                    submenu_to_navigate = Some((submenu, self.current_menu.clone()));
-                }
-
-                // Handle submenu navigation
-                if let Some((submenu, current_menu)) = submenu_to_navigate {
-                    // Make sure the submenu's parent points to the current menu
-                    {
-                        let mut submenu_guard = submenu.lock().unwrap();
-                        submenu_guard.parent = Some(current_menu);
-                    }
-                    self.current_menu = submenu;
-                }
-
-                // Now handle action if it exists
-                if has_action {
-                    // Execute the action
-                    let action_result = self.execute_action_from_idx(idx, params);
-
-                    // Handle action result
-                    if let Some(output) = action_result {
-                        self.add_output(output);
-                    }
-                }
-            } else {
-                // Command not found
-                self.add_output(format!("Unknown command: {}", command));
-            }
-        }
+        // Delegate to handle_key_with_params
+        let result = self.handle_key_with_params(command, params);
 
         self.clear_input_buffer();
         result
@@ -479,50 +404,24 @@ impl<T: std::fmt::Debug> Istari<T> {
 
     /// Navigate up in command history
     pub fn history_up(&mut self) {
-        // If not currently browsing history, save current input and start from the end
-        if self.history_position.is_none() {
-            if self.command_history.is_empty() {
-                return;
-            }
-            self.history_position = Some(self.command_history.len() - 1);
-        } else {
-            // Move up in history (to older commands)
-            if let Some(pos) = self.history_position {
-                if pos > 0 {
-                    self.history_position = Some(pos - 1);
-                }
-            }
-        }
-
-        // Update input buffer with the selected history item
-        if let Some(pos) = self.history_position {
-            if let Some(cmd) = self.command_history.get(pos) {
-                self.input_buffer = cmd.clone();
-            }
+        if let Some(cmd) = self.command_history.up() {
+            self.input_buffer = cmd.clone();
         }
     }
 
     /// Navigate down in command history
     pub fn history_down(&mut self) {
-        // Only act if we're browsing history
-        if let Some(pos) = self.history_position {
-            // Move down in history (to newer commands)
-            if pos < self.command_history.len() - 1 {
-                self.history_position = Some(pos + 1);
-                if let Some(cmd) = self.command_history.get(pos + 1) {
-                    self.input_buffer = cmd.clone();
-                }
-            } else {
-                // We've reached the end of history, return to empty input
-                self.history_position = None;
-                self.input_buffer.clear();
-            }
+        if let Some(cmd) = self.command_history.down() {
+            self.input_buffer = cmd.clone();
+        } else {
+            // At the end of history or exited browsing mode
+            self.input_buffer.clear();
         }
     }
 
     /// Exit history browsing mode
     pub fn exit_history_browsing(&mut self) {
-        self.history_position = None;
+        self.command_history.exit_browsing();
     }
 }
 
@@ -615,5 +514,46 @@ mod tests {
         app.tick();
         assert_eq!(app.output_messages().len(), 1);
         assert_eq!(app.output_messages()[0], "Tick: 1");
+    }
+
+    #[test]
+    fn test_command_history() {
+        let mut history = CommandHistory::new(3);
+
+        // Add commands
+        history.add("cmd1".to_string());
+        history.add("cmd2".to_string());
+        history.add("cmd3".to_string());
+
+        // Test navigation
+        assert_eq!(history.up().unwrap(), "cmd3");
+        assert_eq!(history.up().unwrap(), "cmd2");
+        assert_eq!(history.up().unwrap(), "cmd1");
+        assert_eq!(history.up().unwrap(), "cmd1"); // Can't go past beginning
+
+        assert_eq!(history.down().unwrap(), "cmd2");
+        assert_eq!(history.down().unwrap(), "cmd3");
+        assert_eq!(history.down(), None); // Exit browsing
+
+        // Test max size
+        history.add("cmd4".to_string());
+        assert_eq!(history.entries.len(), 3);
+        assert_eq!(history.entries[0], "cmd2"); // cmd1 was removed
+    }
+
+    #[test]
+    fn test_output_buffer() {
+        let mut buffer = OutputBuffer::new();
+
+        assert!(buffer.messages().is_empty());
+        buffer.add("Test".to_string());
+        assert_eq!(buffer.messages().len(), 1);
+
+        assert!(buffer.has_new_output());
+        assert!(!buffer.has_new_output());
+
+        buffer.clear();
+        assert!(buffer.messages().is_empty());
+        assert!(!buffer.has_new_output());
     }
 }

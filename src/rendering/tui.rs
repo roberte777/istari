@@ -1,3 +1,4 @@
+use crate::rendering::{Renderer, ScrollDirection, ScrollState};
 use crate::{Istari, Mode};
 use ratatui::{
     Terminal,
@@ -10,28 +11,28 @@ use ratatui::{
 use std::io;
 use std::time::{Duration, Instant};
 
-pub struct Renderer {
+pub struct TuiRenderer {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
-    output_scroll: usize,       // Track scroll position for output
-    auto_scroll: bool,          // Whether to auto-scroll to bottom on new output
+    scroll_state: ScrollState,
     last_content_height: usize, // Track the last content height to detect changes
 }
 
-impl Renderer {
-    /// Create a new renderer
+impl TuiRenderer {
+    /// Create a new TUI renderer
     pub fn new() -> io::Result<Self> {
         let backend = CrosstermBackend::new(io::stdout());
         let terminal = Terminal::new(backend)?;
         Ok(Self {
             terminal,
-            output_scroll: 0,
-            auto_scroll: true,
+            scroll_state: ScrollState::new(),
             last_content_height: 0,
         })
     }
+}
 
+impl Renderer for TuiRenderer {
     /// Initialize the terminal
-    pub fn init(&mut self) -> io::Result<()> {
+    fn init(&mut self) -> io::Result<()> {
         crossterm::terminal::enable_raw_mode()?;
         crossterm::execute!(
             io::stdout(),
@@ -43,7 +44,7 @@ impl Renderer {
     }
 
     /// Restore the terminal
-    pub fn cleanup(&mut self) -> io::Result<()> {
+    fn cleanup(&mut self) -> io::Result<()> {
         crossterm::terminal::disable_raw_mode()?;
         crossterm::execute!(
             io::stdout(),
@@ -55,7 +56,7 @@ impl Renderer {
     }
 
     /// Render the current menu
-    pub fn render<T: std::fmt::Debug>(&mut self, app: &mut Istari<T>) -> io::Result<()> {
+    fn render_frame<T: std::fmt::Debug>(&mut self, app: &mut Istari<T>) -> io::Result<()> {
         let menu = app.current_menu();
 
         // Check for new output and update auto-scroll before rendering
@@ -213,234 +214,253 @@ impl Renderer {
             // Calculate max scroll position based on content height
             let output_area_height = output_chunk.height as usize - 2; // Adjusting for borders
             let content_height = output_messages.len();
-            let max_scroll = content_height.saturating_sub(output_area_height);
 
             // Check if content height changed
             let content_changed = content_height != self.last_content_height;
             self.last_content_height = content_height;
 
             // Auto-scroll to bottom if there's new output and auto-scroll is enabled
-            if self.auto_scroll && (has_new_output || content_changed) {
-                self.output_scroll = max_scroll;
-            }
-
-            // Ensure scroll position is valid
-            self.output_scroll = self.output_scroll.min(max_scroll);
+            self.scroll_state.update_auto_scroll(
+                content_height,
+                output_area_height,
+                has_new_output || content_changed
+            );
 
             // Show auto-scroll status in title
-            let scroll_status = if self.auto_scroll {
+            let scroll_status = if self.scroll_state.auto_scroll {
                 "Auto-scroll ON"
             } else {
                 "Auto-scroll OFF"
             };
 
+            // Calculate max_scroll for display
+            let max_scroll = content_height.saturating_sub(output_area_height);
+
             // Render output content
             let output_widget = Paragraph::new(output_text)
-                .block(Block::default().borders(Borders::ALL).title(format!("Output [{}] [{}/{}]", scroll_status, self.output_scroll, max_scroll)))
-                .scroll((self.output_scroll as u16, 0))
+                .block(Block::default().borders(Borders::ALL).title(format!("Output [{}] [{}/{}]", 
+                    scroll_status, self.scroll_state.position, max_scroll)))
+                .scroll((self.scroll_state.position as u16, 0))
                 .wrap(ratatui::widgets::Wrap { trim: true });
 
             f.render_widget(output_widget, output_chunk);
         })?;
         Ok(())
     }
-}
 
-/// Run the application in TUI mode
-pub fn run<T: std::fmt::Debug>(app: &mut crate::Istari<T>) -> io::Result<()> {
-    let mut renderer = Renderer::new()?;
-    renderer.init()?;
+    /// Run the application event loop
+    fn run_event_loop<T: std::fmt::Debug>(&mut self, app: &mut Istari<T>) -> io::Result<()> {
+        // Define the tick rate (how often to redraw)
+        let tick_rate = Duration::from_millis(100);
+        let mut last_tick = Instant::now();
 
-    let result = event_loop(app, &mut renderer);
+        loop {
+            // Render the current state
+            self.render_frame(app)?;
 
-    renderer.cleanup()?;
+            // Check if we should perform a tick update
+            let timeout = tick_rate
+                .checked_sub(last_tick.elapsed())
+                .unwrap_or_else(|| Duration::from_secs(0));
 
-    result
-}
-
-/// Main event loop
-fn event_loop<T: std::fmt::Debug>(
-    app: &mut crate::Istari<T>,
-    renderer: &mut Renderer,
-) -> io::Result<()> {
-    // Define the tick rate (how often to redraw)
-    let tick_rate = Duration::from_millis(100);
-    let mut last_tick = Instant::now();
-
-    loop {
-        // Render the current state
-        renderer.render(app)?;
-
-        // Check if we should perform a tick update
-        let timeout = tick_rate
-            .checked_sub(last_tick.elapsed())
-            .unwrap_or_else(|| Duration::from_secs(0));
-
-        // Poll for events with a timeout
-        if crossterm::event::poll(timeout)? {
-            match crossterm::event::read()? {
-                crossterm::event::Event::Key(key) => {
-                    // Process key events based on current mode
-                    match app.mode() {
-                        crate::Mode::Command => {
-                            // Handle different key events in command mode
-                            match key.code {
-                                // Exit the application
-                                crossterm::event::KeyCode::Char('q')
-                                    if key
-                                        .modifiers
-                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                                {
-                                    return Ok(());
-                                }
-
-                                // Toggle mode
-                                crossterm::event::KeyCode::Tab => {
-                                    app.toggle_mode();
-                                }
-
-                                // Toggle input display
-                                crossterm::event::KeyCode::Char('i')
-                                    if key
-                                        .modifiers
-                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                                {
-                                    app.toggle_show_input();
-                                }
-
-                                // Process input when Enter is pressed
-                                crossterm::event::KeyCode::Enter => {
-                                    if !app.input_buffer().is_empty() && !app.process_input_buffer()
+            // Poll for events with a timeout
+            if crossterm::event::poll(timeout)? {
+                match crossterm::event::read()? {
+                    crossterm::event::Event::Key(key) => {
+                        // Process key events based on current mode
+                        match app.mode() {
+                            crate::Mode::Command => {
+                                // Handle different key events in command mode
+                                match key.code {
+                                    // Exit the application
+                                    crossterm::event::KeyCode::Char('q')
+                                        if key
+                                            .modifiers
+                                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
                                     {
                                         return Ok(());
                                     }
-                                }
 
-                                // Backspace to delete last character
-                                crossterm::event::KeyCode::Backspace => {
-                                    app.exit_history_browsing();
-                                    app.backspace_input_buffer();
-                                }
+                                    // Toggle mode
+                                    crossterm::event::KeyCode::Tab => {
+                                        app.toggle_mode();
+                                    }
 
-                                // Up arrow key for history navigation
-                                crossterm::event::KeyCode::Up => {
-                                    app.history_up();
-                                }
+                                    // Toggle input display
+                                    crossterm::event::KeyCode::Char('i')
+                                        if key
+                                            .modifiers
+                                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                    {
+                                        app.toggle_show_input();
+                                    }
 
-                                // Down arrow key for history navigation
-                                crossterm::event::KeyCode::Down => {
-                                    app.history_down();
-                                }
-
-                                // Any other key press exits history browsing
-                                crossterm::event::KeyCode::Char(c) => {
-                                    app.exit_history_browsing();
-                                    app.add_to_input_buffer(c);
-                                }
-
-                                // Handle single-key commands directly
-                                _ => {
-                                    // Exit history browsing for any other key
-                                    app.exit_history_browsing();
-
-                                    // Convert keycode to string representation
-                                    if let crossterm::event::KeyCode::Char(c) = key.code {
-                                        if app.input_buffer().is_empty()
-                                            && !app.handle_key(c.to_string())
+                                    // Process input when Enter is pressed
+                                    crossterm::event::KeyCode::Enter => {
+                                        if !app.input_buffer().is_empty()
+                                            && !app.process_input_buffer()
                                         {
                                             return Ok(());
                                         }
                                     }
+
+                                    // Backspace to delete last character
+                                    crossterm::event::KeyCode::Backspace => {
+                                        app.exit_history_browsing();
+                                        app.backspace_input_buffer();
+                                    }
+
+                                    // Up arrow key for history navigation
+                                    crossterm::event::KeyCode::Up => {
+                                        app.history_up();
+                                    }
+
+                                    // Down arrow key for history navigation
+                                    crossterm::event::KeyCode::Down => {
+                                        app.history_down();
+                                    }
+
+                                    // Any other key press exits history browsing
+                                    crossterm::event::KeyCode::Char(c) => {
+                                        app.exit_history_browsing();
+                                        app.add_to_input_buffer(c);
+                                    }
+
+                                    // Handle single-key commands directly
+                                    _ => {
+                                        // Exit history browsing for any other key
+                                        app.exit_history_browsing();
+
+                                        // Convert keycode to string representation
+                                        if let crossterm::event::KeyCode::Char(c) = key.code {
+                                            if app.input_buffer().is_empty()
+                                                && !app.handle_key(c.to_string())
+                                            {
+                                                return Ok(());
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                        }
 
-                        crate::Mode::Scroll => {
-                            // Handle different key events in scroll mode
-                            match key.code {
-                                // Exit the application
-                                crossterm::event::KeyCode::Char('q')
-                                    if key
-                                        .modifiers
-                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                                {
-                                    return Ok(());
+                            crate::Mode::Scroll => {
+                                // Handle different key events in scroll mode
+                                match key.code {
+                                    // Exit the application
+                                    crossterm::event::KeyCode::Char('q')
+                                        if key
+                                            .modifiers
+                                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                    {
+                                        return Ok(());
+                                    }
+
+                                    // Toggle mode
+                                    crossterm::event::KeyCode::Tab => {
+                                        app.toggle_mode();
+                                    }
+
+                                    // Toggle auto-scroll
+                                    crossterm::event::KeyCode::Char('a')
+                                        if key
+                                            .modifiers
+                                            .contains(crossterm::event::KeyModifiers::CONTROL) =>
+                                    {
+                                        self.scroll_state.toggle_auto_scroll();
+                                    }
+
+                                    // Scroll down
+                                    crossterm::event::KeyCode::Char('j')
+                                    | crossterm::event::KeyCode::Down => {
+                                        self.scroll_state.scroll(
+                                            ScrollDirection::Down,
+                                            app.output_messages().len(),
+                                            10, // Approximate view height
+                                        );
+                                    }
+
+                                    // Scroll up
+                                    crossterm::event::KeyCode::Char('k')
+                                    | crossterm::event::KeyCode::Up => {
+                                        self.scroll_state.scroll(
+                                            ScrollDirection::Up,
+                                            app.output_messages().len(),
+                                            10, // Approximate view height
+                                        );
+                                    }
+
+                                    // Page down
+                                    crossterm::event::KeyCode::Char('d')
+                                    | crossterm::event::KeyCode::PageDown => {
+                                        self.scroll_state.scroll(
+                                            ScrollDirection::PageDown,
+                                            app.output_messages().len(),
+                                            10, // Approximate view height
+                                        );
+                                    }
+
+                                    // Page up
+                                    crossterm::event::KeyCode::Char('u')
+                                    | crossterm::event::KeyCode::PageUp => {
+                                        self.scroll_state.scroll(
+                                            ScrollDirection::PageUp,
+                                            app.output_messages().len(),
+                                            10, // Approximate view height
+                                        );
+                                    }
+
+                                    // Go to top
+                                    crossterm::event::KeyCode::Char('g')
+                                    | crossterm::event::KeyCode::Home => {
+                                        self.scroll_state.scroll(
+                                            ScrollDirection::Top,
+                                            app.output_messages().len(),
+                                            10, // Approximate view height
+                                        );
+                                    }
+
+                                    // Go to bottom
+                                    crossterm::event::KeyCode::Char('G')
+                                    | crossterm::event::KeyCode::End => {
+                                        self.scroll_state.scroll(
+                                            ScrollDirection::Bottom,
+                                            app.output_messages().len(),
+                                            10, // Approximate view height
+                                        );
+                                    }
+
+                                    _ => {}
                                 }
-
-                                // Toggle mode
-                                crossterm::event::KeyCode::Tab => {
-                                    app.toggle_mode();
-                                }
-
-                                // Toggle auto-scroll
-                                crossterm::event::KeyCode::Char('a')
-                                    if key
-                                        .modifiers
-                                        .contains(crossterm::event::KeyModifiers::CONTROL) =>
-                                {
-                                    renderer.auto_scroll = !renderer.auto_scroll;
-                                }
-
-                                // Scroll down
-                                crossterm::event::KeyCode::Char('j')
-                                | crossterm::event::KeyCode::Down => {
-                                    renderer.output_scroll =
-                                        renderer.output_scroll.saturating_add(1);
-                                }
-
-                                // Scroll up
-                                crossterm::event::KeyCode::Char('k')
-                                | crossterm::event::KeyCode::Up => {
-                                    renderer.output_scroll =
-                                        renderer.output_scroll.saturating_sub(1);
-                                }
-
-                                // Page down
-                                crossterm::event::KeyCode::Char('d')
-                                | crossterm::event::KeyCode::PageDown => {
-                                    renderer.output_scroll =
-                                        renderer.output_scroll.saturating_add(10);
-                                }
-
-                                // Page up
-                                crossterm::event::KeyCode::Char('u')
-                                | crossterm::event::KeyCode::PageUp => {
-                                    renderer.output_scroll =
-                                        renderer.output_scroll.saturating_sub(10);
-                                }
-
-                                // Go to top
-                                crossterm::event::KeyCode::Char('g')
-                                | crossterm::event::KeyCode::Home => {
-                                    renderer.output_scroll = 0;
-                                }
-
-                                // Go to bottom
-                                crossterm::event::KeyCode::Char('G')
-                                | crossterm::event::KeyCode::End => {
-                                    // Will be clamped to max in the render method
-                                    renderer.output_scroll = usize::MAX;
-                                }
-
-                                _ => {}
                             }
                         }
                     }
+                    crossterm::event::Event::Mouse(_) => {
+                        // Mouse events could be handled here if needed
+                    }
+                    crossterm::event::Event::Resize(_, _) => {
+                        // Resize events are automatically handled by the Terminal
+                    }
+                    _ => {}
                 }
-                crossterm::event::Event::Mouse(_) => {
-                    // Mouse events could be handled here if needed
-                }
-                crossterm::event::Event::Resize(_, _) => {
-                    // Resize events are automatically handled by the Terminal
-                }
-                _ => {}
+            }
+
+            // Check if it's time for a tick update
+            if last_tick.elapsed() >= tick_rate {
+                app.tick();
+                last_tick = Instant::now();
             }
         }
-
-        // Check if it's time for a tick update
-        if last_tick.elapsed() >= tick_rate {
-            app.tick();
-            last_tick = Instant::now();
-        }
     }
+}
+
+/// Run the application in TUI mode
+pub fn run<T: std::fmt::Debug>(app: &mut crate::Istari<T>) -> io::Result<()> {
+    let mut renderer = TuiRenderer::new()?;
+    renderer.init()?;
+
+    let result = renderer.run_event_loop(app);
+
+    renderer.cleanup()?;
+
+    result
 }
