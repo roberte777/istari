@@ -38,6 +38,12 @@ pub struct Istari<T> {
     runtime: tokio::runtime::Runtime,
     /// Rendering mode (TUI or Text)
     render_mode: RenderMode,
+    /// Command history
+    command_history: Vec<String>,
+    /// Current position in command history (None means not browsing history)
+    history_position: Option<usize>,
+    /// Maximum number of commands to keep in history
+    max_history_size: usize,
 }
 
 impl<T: std::fmt::Debug> Istari<T> {
@@ -58,6 +64,9 @@ impl<T: std::fmt::Debug> Istari<T> {
             show_input: false,
             runtime: tokio::runtime::Runtime::new().unwrap(),
             render_mode: RenderMode::TUI, // Default to TUI mode
+            command_history: Vec::new(),
+            history_position: None,
+            max_history_size: 100,
         })
     }
 
@@ -73,6 +82,12 @@ impl<T: std::fmt::Debug> Istari<T> {
     /// Set the rendering mode
     pub fn with_render_mode(mut self, mode: RenderMode) -> Self {
         self.render_mode = mode;
+        self
+    }
+
+    /// Set the maximum number of commands to keep in history
+    pub fn with_max_history_size(mut self, size: usize) -> Self {
+        self.max_history_size = size;
         self
     }
 
@@ -346,6 +361,21 @@ impl<T: std::fmt::Debug> Istari<T> {
         let input_clone = self.input_buffer.clone();
         let input = input_clone.trim();
 
+        // Add command to history only if it's not empty and different from the last entry
+        if !input.is_empty() {
+            if self.command_history.is_empty() || self.command_history.last().unwrap() != input {
+                self.command_history.push(input.to_string());
+
+                // Trim history if it exceeds the maximum size
+                if self.command_history.len() > self.max_history_size {
+                    self.command_history.remove(0);
+                }
+            }
+        }
+
+        // Reset history position
+        self.history_position = None;
+
         // Split input into command and parameters
         let parts: Vec<&str> = input.splitn(2, ' ').collect();
         let command = parts[0].to_lowercase();
@@ -445,6 +475,54 @@ impl<T: std::fmt::Debug> Istari<T> {
 
         self.clear_input_buffer();
         result
+    }
+
+    /// Navigate up in command history
+    pub fn history_up(&mut self) {
+        // If not currently browsing history, save current input and start from the end
+        if self.history_position.is_none() {
+            if self.command_history.is_empty() {
+                return;
+            }
+            self.history_position = Some(self.command_history.len() - 1);
+        } else {
+            // Move up in history (to older commands)
+            if let Some(pos) = self.history_position {
+                if pos > 0 {
+                    self.history_position = Some(pos - 1);
+                }
+            }
+        }
+
+        // Update input buffer with the selected history item
+        if let Some(pos) = self.history_position {
+            if let Some(cmd) = self.command_history.get(pos) {
+                self.input_buffer = cmd.clone();
+            }
+        }
+    }
+
+    /// Navigate down in command history
+    pub fn history_down(&mut self) {
+        // Only act if we're browsing history
+        if let Some(pos) = self.history_position {
+            // Move down in history (to newer commands)
+            if pos < self.command_history.len() - 1 {
+                self.history_position = Some(pos + 1);
+                if let Some(cmd) = self.command_history.get(pos + 1) {
+                    self.input_buffer = cmd.clone();
+                }
+            } else {
+                // We've reached the end of history, return to empty input
+                self.history_position = None;
+                self.input_buffer.clear();
+            }
+        }
+    }
+
+    /// Exit history browsing mode
+    pub fn exit_history_browsing(&mut self) {
+        self.history_position = None;
     }
 }
 

@@ -318,16 +318,31 @@ fn event_loop<T: std::fmt::Debug>(
 
                                 // Backspace to delete last character
                                 crossterm::event::KeyCode::Backspace => {
+                                    app.exit_history_browsing();
                                     app.backspace_input_buffer();
                                 }
 
-                                // Add character to input buffer
+                                // Up arrow key for history navigation
+                                crossterm::event::KeyCode::Up => {
+                                    app.history_up();
+                                }
+
+                                // Down arrow key for history navigation
+                                crossterm::event::KeyCode::Down => {
+                                    app.history_down();
+                                }
+
+                                // Any other key press exits history browsing
                                 crossterm::event::KeyCode::Char(c) => {
+                                    app.exit_history_browsing();
                                     app.add_to_input_buffer(c);
                                 }
 
                                 // Handle single-key commands directly
                                 _ => {
+                                    // Exit history browsing for any other key
+                                    app.exit_history_browsing();
+
                                     // Convert keycode to string representation
                                     if let crossterm::event::KeyCode::Char(c) = key.code {
                                         if app.input_buffer().is_empty()
