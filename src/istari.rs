@@ -39,7 +39,7 @@ pub struct Istari<T> {
     /// Rendering mode (TUI or Text)
     render_mode: RenderMode,
     /// Command history
-    command_history: Vec<String>,
+    pub(crate) command_history: Vec<String>,
     /// Current position in command history (None means not browsing history)
     history_position: Option<usize>,
     /// Maximum number of commands to keep in history
